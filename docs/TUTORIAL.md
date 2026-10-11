@@ -32,7 +32,7 @@
 ### 1.2 源码编译
 ```bash
 # 1. 检出代码并进入根目录
-git clone https://github.com/your-username/transark.git
+git clone https://github.com/fengzhiyushui/transark.git
 cd transark
 
 # 2. 安装 Monorepo 依赖

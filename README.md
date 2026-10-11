@@ -97,7 +97,7 @@ flowchart TD
 
 ### 2. 获取代码与安装依赖
 ```bash
-git clone https://github.com/your-username/transark.git
+git clone https://github.com/fengzhiyushui/transark.git
 cd transark
 
 # 安装 Monorepo 全量依赖
