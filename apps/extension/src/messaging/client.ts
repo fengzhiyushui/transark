@@ -125,3 +125,31 @@ export async function toggleCurrentPageTranslation(
   });
   return Boolean(resp.success);
 }
+
+export async function fetchModels(
+  baseUrl: string,
+  apiKey?: string,
+  protocol?: string
+): Promise<string[]> {
+  const resp = await sendMessageToBackground<{ models: string[] }>({
+    type: 'FETCH_MODELS',
+    payload: { baseUrl, apiKey, protocol },
+  });
+  if (!resp.success || !resp.data) {
+    throw new Error(resp.error || '获取模型列表失败');
+  }
+  return resp.data.models;
+}
+
+export async function setPageDisplayMode(
+  mode: 'bilingual' | 'translation-only' | 'original-only'
+): Promise<boolean> {
+  const tabId = await getActiveTabId();
+  if (!tabId) return false;
+  const resp = await sendMessageToTab<string>(tabId, {
+    type: 'SET_DISPLAY_MODE',
+    payload: { mode },
+  });
+  return Boolean(resp.success);
+}
+

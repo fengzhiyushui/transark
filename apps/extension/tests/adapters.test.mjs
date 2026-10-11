@@ -82,4 +82,31 @@ describe('OpenAIChatAdapter and OllamaAdapter Assembly', () => {
     });
     assert.equal(adapter['resolveEndpoint'](), 'http://127.0.0.1:11434/api/chat');
   });
+
+  test('AnthropicAdapter formats endpoint and headers correctly', async () => {
+    const { AnthropicAdapter } = await import('../src/adapters/anthropic-adapter.ts');
+    const adapter = new AnthropicAdapter({
+      profileId: 'claude-test',
+      revision: 1,
+      name: 'Claude Test',
+      protocol: 'anthropic-messages',
+      baseUrl: 'https://api.anthropic.com/v1',
+      model: 'claude-3-5-sonnet-20241022',
+      auth: { type: 'api-key', apiKey: 'sk-ant-test-key' },
+      dataPolicy: 'allow-cloud',
+      capabilities: { textTranslation: true, ocr: false, asr: false },
+    });
+    assert.equal(adapter['resolveEndpoint'](), 'https://api.anthropic.com/v1/messages');
+    const headers = adapter['buildHeaders']();
+    assert.equal(headers['x-api-key'], 'sk-ant-test-key');
+    assert.equal(headers['anthropic-version'], '2023-06-01');
+    assert.equal(headers['anthropic-dangerous-direct-browser-access'], 'true');
+  });
+
+  test('ChromeBuiltinAdapter detects environment capability', async () => {
+    const { ChromeBuiltinAdapter } = await import('../src/adapters/chrome-builtin-adapter.ts');
+    const isSupported = ChromeBuiltinAdapter.isSupported();
+    assert.equal(typeof isSupported, 'boolean');
+  });
 });
+

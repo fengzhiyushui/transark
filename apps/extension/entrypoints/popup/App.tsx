@@ -6,11 +6,13 @@ import {
   updateSettings,
   queryCurrentPageStatus,
   toggleCurrentPageTranslation,
+  setPageDisplayMode,
   getActiveTabId,
   sendMessageToTab,
 } from '../../src/messaging/client';
 import type { ExtensionSettings } from '../../src/storage/extension-storage';
 import type { PageTranslationStatus } from '../../src/messaging/protocol';
+import type { DisplayMode } from '@translate/contracts';
 import {
   Languages,
   Power,
@@ -23,6 +25,9 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  Eye,
+  Columns,
+  FileText,
 } from 'lucide-react';
 
 const LANGUAGE_OPTIONS = [
@@ -41,16 +46,23 @@ export const App: React.FC = () => {
   const [pageStatus, setPageStatus] = useState<PageTranslationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [translatingNow, setTranslatingNow] = useState(false);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('bilingual');
 
   useEffect(() => {
     async function init() {
       try {
         const s = await fetchSettings();
         setSettings(s);
+        if (s.displayMode) {
+          setDisplayMode(s.displayMode);
+        }
         const status = await queryCurrentPageStatus();
         setPageStatus(status);
         if (status) {
           setTranslatingNow(status.isTranslating && !status.isReverted);
+          if (status.displayMode) {
+            setDisplayMode(status.displayMode);
+          }
         }
       } catch (err) {
         console.error('Failed to init popup:', err);
@@ -78,14 +90,12 @@ export const App: React.FC = () => {
     }, 300);
   };
 
-  const handleRevert = async () => {
-    const tabId = await getActiveTabId();
-    if (tabId) {
-      await sendMessageToTab(tabId, { type: 'RESTORE_PAGE_ORIGINAL' });
-      setTranslatingNow(false);
-      const status = await queryCurrentPageStatus();
-      setPageStatus(status);
-    }
+  const handleSelectDisplayMode = async (mode: DisplayMode) => {
+    setDisplayMode(mode);
+    await updateSettings({ displayMode: mode });
+    await setPageDisplayMode(mode);
+    const status = await queryCurrentPageStatus();
+    setPageStatus(status);
   };
 
   const handleSelectProfile = async (profileId: string) => {
@@ -125,16 +135,16 @@ export const App: React.FC = () => {
       : 0;
 
   return (
-    <div className="flex w-[360px] min-h-[460px] flex-col bg-slate-50 text-slate-800 antialiased select-none">
+    <div className="flex w-[360px] min-h-[480px] flex-col bg-slate-50 text-slate-800 antialiased select-none">
       <Header />
 
-      <div className="p-3.5 space-y-3.5">
+      <div className="p-3.5 space-y-3">
         {/* 核心双语翻译主控卡片 */}
         <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs transition-all">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-900">网页双语对照</span>
+                <span className="text-xs font-bold text-slate-900">网页智能翻译</span>
                 {translatingNow ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -148,7 +158,7 @@ export const App: React.FC = () => {
                 )}
               </div>
               <p className="text-[11px] text-slate-500 leading-tight">
-                {translatingNow ? '智能分块 · 视口优先无感加载' : '点击右侧按钮开启当前网页双语翻译'}
+                {translatingNow ? '智能分块 · 视口优先无感加载' : '点击右侧按钮开启当前网页翻译'}
               </p>
             </div>
 
@@ -180,28 +190,56 @@ export const App: React.FC = () => {
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-
-              {/* 撤销 / 隐藏译文 */}
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={handleRevert}
-                  className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  <span>一键隐藏译文 (恢复纯净原文)</span>
-                </button>
-                {pageStatus.isReverted && (
-                  <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                    已切换原文
-                  </span>
-                )}
-              </div>
             </div>
           )}
         </div>
 
+        {/* 呈现模式选项切换器 (双语对照 / 仅译文 / 仅原文) */}
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Eye className="h-3.5 w-3.5 text-blue-600" />
+              <span>呈现排版模式</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">瞬切生效</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
+            <button
+              onClick={() => handleSelectDisplayMode('bilingual')}
+              className={`rounded-lg py-1.5 text-center text-[11px] font-bold transition-all cursor-pointer ${
+                displayMode === 'bilingual'
+                  ? 'bg-white text-blue-600 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              双语对照
+            </button>
+            <button
+              onClick={() => handleSelectDisplayMode('translation-only')}
+              className={`rounded-lg py-1.5 text-center text-[11px] font-bold transition-all cursor-pointer ${
+                displayMode === 'translation-only'
+                  ? 'bg-white text-blue-600 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              仅显示译文
+            </button>
+            <button
+              onClick={() => handleSelectDisplayMode('original-only')}
+              className={`rounded-lg py-1.5 text-center text-[11px] font-bold transition-all cursor-pointer ${
+                displayMode === 'original-only'
+                  ? 'bg-white text-blue-600 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              仅显示原文
+            </button>
+          </div>
+        </div>
+
         {/* 目标语言设置卡片 */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-xs">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
@@ -224,7 +262,7 @@ export const App: React.FC = () => {
         </div>
 
         {/* 当前翻译引擎与驱动卡片 */}
-        <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-xs space-y-2.5">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -267,37 +305,37 @@ export const App: React.FC = () => {
           )}
         </div>
 
-        {/* 底部独立页面快捷入口 (按用户要求显式打开新页面) */}
+        {/* 底部独立页面快捷入口 */}
         <div className="grid grid-cols-2 gap-2 pt-0.5">
           <button
             onClick={() => openPageInNewTab('reader.html')}
-            className="group flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3 text-left shadow-2xs hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer"
+            className="group flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 text-left shadow-2xs hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between w-full">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <BookOpen className="h-3.5 w-3.5" />
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <BookOpen className="h-3 w-3" />
               </div>
               <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-blue-600 opacity-70" />
             </div>
-            <div className="mt-2.5">
+            <div className="mt-2">
               <div className="text-xs font-semibold text-slate-800">本地阅读器</div>
-              <p className="text-[10px] text-slate-500 mt-0.5">新标签页打开文档</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">新标签页打开</p>
             </div>
           </button>
 
           <button
             onClick={() => openPageInNewTab('options.html')}
-            className="group flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-3 text-left shadow-2xs hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer"
+            className="group flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-2.5 text-left shadow-2xs hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between w-full">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <SlidersHorizontal className="h-3.5 w-3.5" />
+              <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <SlidersHorizontal className="h-3 w-3" />
               </div>
               <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-blue-600 opacity-70" />
             </div>
-            <div className="mt-2.5">
+            <div className="mt-2">
               <div className="text-xs font-semibold text-slate-800">完整设置中心</div>
-              <p className="text-[10px] text-slate-500 mt-0.5">新标签页打开控制台</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">新标签页打开</p>
             </div>
           </button>
         </div>

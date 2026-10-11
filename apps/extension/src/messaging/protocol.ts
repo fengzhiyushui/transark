@@ -2,6 +2,7 @@ import type {
   TranslationRequest,
   TranslationResponse,
   TranslationProviderConfig,
+  DisplayMode,
 } from '@translate/contracts';
 import type { ExtensionSettings } from '../storage/extension-storage';
 
@@ -10,7 +11,9 @@ export type ExtensionMessageType =
   | 'GET_SETTINGS'
   | 'UPDATE_SETTINGS'
   | 'TEST_PROVIDER_CONNECTION'
+  | 'FETCH_MODELS'
   | 'TOGGLE_PAGE_TRANSLATION'
+  | 'SET_DISPLAY_MODE'
   | 'GET_PAGE_STATUS'
   | 'RESTORE_PAGE_ORIGINAL'
   | 'PING';
@@ -29,8 +32,14 @@ export interface UpdateSettingsMessage extends BaseMessage<'UPDATE_SETTINGS', Pa
 export interface TestProviderConnectionMessage
   extends BaseMessage<'TEST_PROVIDER_CONNECTION', { profile: TranslationProviderConfig }> {}
 
+export interface FetchModelsMessage
+  extends BaseMessage<'FETCH_MODELS', { baseUrl: string; apiKey?: string; protocol?: string }> {}
+
 export interface TogglePageTranslationMessage
   extends BaseMessage<'TOGGLE_PAGE_TRANSLATION', { enabled: boolean; targetLanguage?: string }> {}
+
+export interface SetDisplayModeMessage
+  extends BaseMessage<'SET_DISPLAY_MODE', { mode: DisplayMode }> {}
 
 export interface GetPageStatusMessage extends BaseMessage<'GET_PAGE_STATUS', void> {}
 
@@ -43,7 +52,9 @@ export type ExtensionMessage =
   | GetSettingsMessage
   | UpdateSettingsMessage
   | TestProviderConnectionMessage
+  | FetchModelsMessage
   | TogglePageTranslationMessage
+  | SetDisplayModeMessage
   | GetPageStatusMessage
   | RestorePageOriginalMessage
   | PingMessage;
@@ -62,4 +73,5 @@ export interface PageTranslationStatus {
   translatedSegments: number;
   pendingSegments: number;
   targetLanguage: string;
+  displayMode?: DisplayMode;
 }

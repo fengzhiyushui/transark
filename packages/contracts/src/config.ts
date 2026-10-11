@@ -7,14 +7,28 @@
 export type DataPolicy = 'device-only' | 'allow-lan' | 'allow-cloud';
 
 /**
- * 通信协议与适配器标识
+ * 通信协议与适配器标识：
+ * - 'openai-chat': OpenAI 标准 ChatCompletions 接口 (/v1/chat/completions)
+ * - 'openai-responses': OpenAI Structured Outputs / Responses 规范
+ * - 'anthropic-messages': Anthropic Claude 官方规范 (/v1/messages)
+ * - 'chrome-builtin': 浏览器端侧原生翻译引擎 (Chrome On-device Translator)
+ * - 'mock': 内置离线模拟引擎 (零配置快速体验)
  */
 export type TranslationProtocol =
   | 'openai-chat'
   | 'openai-responses'
-  | 'ollama'
-  | 'custom-translate'
+  | 'anthropic-messages'
+  | 'chrome-builtin'
+  | 'mock'
   | (string & {});
+
+/**
+ * 译文页面展示呈现模式：
+ * - 'bilingual': 双语对照 (原文在上/左，译文在下/右)
+ * - 'translation-only': 仅显示译文 (隐藏原始外语文字)
+ * - 'original-only': 仅显示原文 (隐藏所有译文容器)
+ */
+export type DisplayMode = 'bilingual' | 'translation-only' | 'original-only';
 
 /**
  * 服务接口部署位置（网络拓扑维度）

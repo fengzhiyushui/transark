@@ -49,29 +49,25 @@ export class OpenAIChatAdapter implements TranslationProvider {
     const headers = this.buildHeaders();
     const startTime = performance.now();
 
-    const systemPrompt = `You are a professional, high-fidelity translation engine.
-Translate the provided text segments from ${request.sourceLanguage || 'source language'} into ${request.targetLanguage}.
-Rules:
-1. Maintain terminology and original sentence tone.
-2. Preserve placeholders, IDs, and code tokens intact.
-3. You MUST respond with ONLY a valid JSON object matching this schema:
-{"segments": [{"id": "segment-id", "translation": "translated text"}]}
-Do not include any greeting, preamble, markdown formatting (no \`\`\`json), or concluding notes.`;
+    const systemPrompt = `Translate each segment into ${request.targetLanguage}. Output ONLY a valid JSON object matching {"segments":[{"id":"id","translation":"translated_text"}]}. Do NOT include markdown code fences (\`\`\`json) or any explanations.`;
 
     const userPayload = {
       segments: request.segments.map((s) => ({ id: s.id, text: s.text })),
       targetLanguage: request.targetLanguage,
     };
 
-    const bodyPayload = {
+    const bodyPayload: Record<string, any> = {
       model: this.config.model || 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: JSON.stringify(userPayload) },
       ],
-      temperature: request.options?.temperature ?? 0.2,
-      response_format: { type: 'json_object' },
+      temperature: request.options?.temperature ?? 0.1,
     };
+
+    if (this.config.protocol === 'openai-responses') {
+      bodyPayload.response_format = { type: 'json_object' };
+    }
 
     let fetchResponse: Response;
     try {

@@ -1,6 +1,7 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { loadSettings, saveSettings, getActiveProfile } from '../src/storage/extension-storage';
 import { createTranslationProvider } from '../src/adapters/provider-factory';
+import { fetchAvailableModels } from '../src/adapters/model-fetcher';
 import type {
   ExtensionMessage,
   MessageResponse,
@@ -62,6 +63,19 @@ async function handleMessage(message: ExtensionMessage): Promise<MessageResponse
       const provider = createTranslationProvider(profile, settings.mockDelayMs);
       const testResult = await provider.testConnection();
       return { success: true, data: testResult };
+    }
+
+    case 'FETCH_MODELS': {
+      const payload = message.payload as { baseUrl: string; apiKey?: string; protocol?: string } | undefined;
+      if (!payload?.baseUrl) {
+        return { success: false, error: '缺少 BaseUrl 参数' };
+      }
+      try {
+        const models = await fetchAvailableModels(payload.baseUrl, payload.apiKey, payload.protocol);
+        return { success: true, data: { models } };
+      } catch (err: any) {
+        return { success: false, error: err?.message || '获取模型列表失败' };
+      }
     }
 
     case 'TRANSLATE_SEGMENTS': {

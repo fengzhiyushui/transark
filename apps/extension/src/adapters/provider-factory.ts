@@ -3,6 +3,8 @@ import type { TranslationProvider } from './types';
 import { MockProvider } from './mock-adapter';
 import { OpenAIChatAdapter } from './openai-adapter';
 import { OllamaAdapter } from './ollama-adapter';
+import { AnthropicAdapter } from './anthropic-adapter';
+import { ChromeBuiltinAdapter } from './chrome-builtin-adapter';
 
 export function createTranslationProvider(
   config: TranslationProviderConfig,
@@ -14,15 +16,20 @@ export function createTranslationProvider(
     case 'mock' as any:
       return new MockProvider(config, mockDelayMs);
 
-    case 'ollama':
-      return new OllamaAdapter(config);
+    case 'chrome-builtin':
+      return new ChromeBuiltinAdapter(config);
+
+    case 'anthropic-messages':
+      return new AnthropicAdapter(config);
 
     case 'openai-chat':
     case 'openai-responses':
       return new OpenAIChatAdapter(config);
 
+    case 'ollama':
+      return new OllamaAdapter(config);
+
     case 'custom-translate':
-      // 支持自定义 REST 接口，若为测试环境亦可回退兼容
       return new OpenAIChatAdapter(config);
 
     default:

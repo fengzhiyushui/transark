@@ -120,8 +120,16 @@ export default defineContentScript({
               translatedSegments: mounterStatus.completed,
               pendingSegments: stats.pending,
               targetLanguage: targetLang,
+              displayMode: mounterStatus.displayMode,
             };
             sendResponse({ success: true, data: status });
+            break;
+          }
+
+          case 'SET_DISPLAY_MODE': {
+            const { mode } = message.payload || { mode: 'bilingual' };
+            mounter.setDisplayMode(mode);
+            sendResponse({ success: true, data: mode });
             break;
           }
 
@@ -138,7 +146,7 @@ export default defineContentScript({
           }
 
           case 'RESTORE_PAGE_ORIGINAL': {
-            revertToOriginal();
+            mounter.setDisplayMode('original-only');
             sendResponse({ success: true });
             break;
           }

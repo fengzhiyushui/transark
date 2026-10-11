@@ -1,5 +1,5 @@
-import type { TranslationProviderConfig } from '@translate/contracts';
-import { DEFAULT_MOCK_PROFILE, DEFAULT_PROFILES } from './default-configs';
+import type { TranslationProviderConfig, DisplayMode } from '@translate/contracts';
+import { DEFAULT_PROFILES, DEFAULT_OPENAI_PROFILE, DEFAULT_MOCK_PROFILE } from './default-configs';
 
 export interface ExtensionSettings {
   activeProfileId: string;
@@ -8,17 +8,19 @@ export interface ExtensionSettings {
   sourceLanguage: string;
   autoTranslate: boolean;
   bilingualDisplay: boolean;
+  displayMode: DisplayMode;
   showFloatingControl: boolean;
   mockDelayMs: number;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
-  activeProfileId: DEFAULT_MOCK_PROFILE.profileId,
+  activeProfileId: DEFAULT_OPENAI_PROFILE.profileId,
   profiles: DEFAULT_PROFILES,
   targetLanguage: 'zh-CN',
   sourceLanguage: 'auto',
   autoTranslate: false,
   bilingualDisplay: true,
+  displayMode: 'bilingual',
   showFloatingControl: true,
   mockDelayMs: 120,
 };
