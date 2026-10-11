@@ -12,6 +12,7 @@ import {
   Video,
   Sparkles,
   Info,
+  Layers,
 } from 'lucide-react';
 
 const SAMPLE_DOCUMENT: ParsedDocumentParagraph[] = [
@@ -85,10 +86,10 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-slate-50 overflow-hidden">
+    <div className="flex h-screen flex-col bg-slate-50 text-slate-800 antialiased overflow-hidden">
       <Header
-        title="译舟工作台"
-        subtitle="本地文档双语对照阅读与视频字幕控制台"
+        title="译舟工作台 · TransArk Workspace"
+        subtitle="本地独立阅读器 · 零服务端中转的双语对照解析与字幕控制台"
       />
 
       <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-hidden">
@@ -97,21 +98,21 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('document')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'document'
                   ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100/70 hover:text-slate-900'
               }`}
             >
               <BookOpen className="h-4 w-4" />
-              <span>本地文件双语对照阅读 (TXT/DOCX)</span>
+              <span>本地文件双语对照阅读 (TXT / DOCX)</span>
             </button>
             <button
               onClick={() => setActiveTab('video')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'video'
                   ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100/70 hover:text-slate-900'
               }`}
             >
               <Video className="h-4 w-4" />
@@ -127,7 +128,7 @@ export const App: React.FC = () => {
                   paragraphs: SAMPLE_DOCUMENT,
                 });
               }}
-              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors font-medium"
+              className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold transition-colors cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span>重置为示范样本</span>
@@ -136,11 +137,11 @@ export const App: React.FC = () => {
         </div>
 
         {errorMsg && (
-          <div className="mb-3 rounded-lg bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200 flex items-center justify-between">
+          <div className="mb-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700 border border-rose-200 flex items-center justify-between animate-in fade-in">
             <span>{errorMsg}</span>
             <button
               onClick={() => setErrorMsg(null)}
-              className="text-rose-500 hover:text-rose-800 font-bold"
+              className="text-rose-500 hover:text-rose-800 font-bold cursor-pointer"
             >
               ✕
             </button>
@@ -158,16 +159,28 @@ export const App: React.FC = () => {
                   onError={(err) => setErrorMsg(err)}
                 />
 
-                <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 space-y-2 shadow-xs">
-                  <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
-                    <Info className="h-4 w-4 text-blue-500" />
-                    <span>离线对照阅读特性</span>
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4.5 text-xs text-slate-500 space-y-2.5 shadow-xs">
+                  <div className="flex items-center gap-1.5 text-slate-800 font-bold">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <span>离线双语阅读特性</span>
                   </div>
-                  <ul className="list-disc list-inside space-y-1 text-slate-500 text-[11px] leading-relaxed">
-                    <li>支持直接读取 DOCX 原生文档与 TXT/MD 纯文本</li>
-                    <li>无任何服务端中转，全部在浏览器本地内存解析</li>
-                    <li>支持左右分栏或上下逐段双语对照模式</li>
-                    <li>结合本地 Mock 引擎或本地大模型实现零网络依赖</li>
+                  <ul className="space-y-1.5 text-slate-600 text-[11px] leading-relaxed">
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>支持直接读取 DOCX、TXT 与 Markdown 文本</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>零服务端中转，全部在浏览器本地沙盒解析</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>左右分栏与上下逐段模式实时无缝切换</span>
+                    </li>
+                    <li className="flex items-start gap-1.5">
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>配合本地 Ollama 或伴随服务实现离线翻译</span>
+                    </li>
                   </ul>
                 </div>
               </div>
