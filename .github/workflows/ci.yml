@@ -1,0 +1,66 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  lint-and-test-frontend:
+    name: Frontend & Contracts Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Monorepo dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts package
+        run: pnpm --filter @translate/contracts build
+
+      - name: Typecheck whole monorepo
+        run: pnpm typecheck
+
+      - name: Run contracts & extension tests
+        run: |
+          pnpm --filter @translate/contracts test
+          pnpm --filter @translate/extension test
+
+      - name: Build extension bundle
+        run: pnpm --filter @translate/extension build
+
+  test-backend:
+    name: Local Companion Service Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install local service dependencies
+        run: |
+          cd services/local
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-asyncio
+
+      - name: Run pytest test suite
+        run: |
+          cd services/local
+          python -m pytest

@@ -1,0 +1,15 @@
+{
+  "name": "@translate/local-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local companion service for document parsing, OCR, ASR, and long-running jobs",
+  "scripts": {
+    "dev": "python -m local_service",
+    "start": "python -m local_service",
+    "test": "python -m pytest",
+    "test:verbose": "python -m pytest -v"
+  },
+  "dependencies": {
+    "@translate/contracts": "workspace:*"
+  }
+}

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>译舟 (TransArk) - 扩展集成测试演示页面</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+      color: #1e293b;
+      background: #f8fafc;
+    }
+    h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
+    h2 { color: #1e293b; margin-top: 28px; }
+    p { margin: 16px 0; }
+    blockquote {
+      border-left: 4px solid #3b82f6;
+      padding: 8px 16px;
+      margin: 16px 0;
+      background: #eff6ff;
+      border-radius: 0 6px 6px 0;
+      color: #1e3a8a;
+    }
+    .demo-bar {
+      position: sticky;
+      top: 10px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      padding: 12px 18px;
+      border-radius: 10px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+    }
+    button {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #e2e8f0; color: #334155; }
+    .btn-secondary:hover { background: #cbd5e1; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+  <div class="demo-bar" id="yizhou-root">
+    <strong>译舟 (TransArk) 离线测试栏：</strong>
+    <button class="btn-primary" onclick="triggerTestTranslation()">模拟触发整页翻译</button>
+    <button class="btn-secondary" onclick="triggerTestRevert()">一键撤销 (隐藏译文)</button>
+    <button class="btn-secondary" onclick="triggerTestRestore()">一键恢复 (显示译文)</button>
+    <button class="btn-secondary" onclick="addDynamicParagraph()">插入动态内容 (测试增量监听)</button>
+  </div>
+
+  <h1>Architecture and Design of Modern Translation Extensions</h1>
+
+  <p>
+    This is a cross-platform browser translation extension built with Manifest V3 and WXT.
+    It guarantees high responsiveness and seamless reading through modular adapter architectures.
+  </p>
+
+  <blockquote>
+    Offline translation guarantees complete data privacy by keeping all processing on-device.
+    No sensitive business data or confidential documents ever leave your perimeter.
+  </blockquote>
+
+  <h2>Core Engineering Principles</h2>
+
+  <p>
+    Both text PDF files and scanned image documents can be parsed through reading order layout reconstruction.
+    The paragraph recognition algorithm splits visible block elements and continuous inline nodes into discrete translation units.
+  </p>
+
+  <p>
+    A priority queue powered by IntersectionObserver ensures that elements inside the viewport are processed first,
+    dramatically reducing initial latency and preventing unnecessary resource waste on unseen sections of long articles.
+  </p>
+
+  <h2>Bilingual DOM Mounting and State Reversion</h2>
+
+  <p>
+    Bilingual DOM mounting preserves original nodes and event listeners, allowing seamless one-click revert and restore.
+    The extension never mutates innerHTML directly, protecting external framework state and dynamic listeners from destruction.
+  </p>
+
+  <div id="dynamic-container"></div>
+
+  <script>
+    let isReverted = false;
+
+    function triggerTestTranslation() {
+      // 触发向 Content Script 发送或者直接演示 DOM Mounter 机制
+      window.postMessage({ type: 'DEMO_TRIGGER_TRANSLATE' }, '*');
+    }
+
+    function triggerTestRevert() {
+      const wrappers = document.querySelectorAll('.translate-bilingual-wrapper');
+      wrappers.forEach(w => w.style.display = 'none');
+      isReverted = true;
+    }
+
+    function triggerTestRestore() {
+      const wrappers = document.querySelectorAll('.translate-bilingual-wrapper');
+      wrappers.forEach(w => w.style.display = 'block');
+      isReverted = false;
+    }
+
+    let dynamicCount = 0;
+    function addDynamicParagraph() {
+      const container = document.getElementById('dynamic-container');
+      const p = document.createElement('p');
+      dynamicCount++;
+      p.id = 'dyn-' + dynamicCount;
+      p.textContent = `Dynamic continuous update node #${dynamicCount}: In this session, we demonstrate real-time offline speech recognition.`;
+      container.appendChild(p);
+    }
+  </script>
+</body>
+</html>

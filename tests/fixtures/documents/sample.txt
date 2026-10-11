@@ -1,0 +1,3 @@
+Hello world.
+This is a sample document for translation testing.
+Offline translation preserves your privacy and keeps your data on-device.
