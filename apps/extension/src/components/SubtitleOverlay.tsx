@@ -93,8 +93,8 @@ export const VideoSubtitlePlayer: React.FC<{
         id: 'cue-4',
         startTime: 12.0,
         endTime: 16.5,
-        text: 'Both cloud models and local offline Ollama are fully supported.',
-        translatedText: '公网云端大模型与本地离线 Ollama 均获得完整的原生支持。',
+        text: 'Both OpenAI-compatible and Anthropic cloud models are fully supported.',
+        translatedText: 'OpenAI 兼容协议与 Anthropic 云端模型均获得完整的原生支持。',
       },
     ]
   );

@@ -3,7 +3,12 @@ import type {
   MessageResponse,
   PageTranslationStatus,
 } from './protocol';
-import type { TranslationRequest, TranslationResponse, TranslationProviderConfig } from '@translate/contracts';
+import type {
+  TranslationRequest,
+  TranslationResponse,
+  TranslationProviderConfig,
+  TranslationSegmentResult,
+} from '@translate/contracts';
 import type { ExtensionSettings } from '../storage/extension-storage';
 
 export async function sendMessageToBackground<T = unknown>(
@@ -53,9 +58,46 @@ export async function getActiveTabId(): Promise<number | null> {
   return null;
 }
 
+/**
+ * 请求翻译。
+ *
+ * @param request  翻译请求
+ * @param onSegment 可选的逐段增量回调。传入时启用流式：
+ *                  Background 每解析出一个完整段落就推送过来，
+ *                  实现「首段即回填」，无需等待整批完成。
+ *                  返回的 TranslationResponse 仍是完整权威结果。
+ */
 export async function requestTranslation(
-  request: TranslationRequest
+  request: TranslationRequest,
+  onSegment?: (segment: TranslationSegmentResult) => void
 ): Promise<TranslationResponse> {
+  const stream = Boolean(onSegment);
+
+  // 流式：预先注册增量监听，按 requestId 过滤属于本次请求的段落
+  if (stream && typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+    const requestId = request.requestId;
+    const listener = (message: any) => {
+      if (message?.type !== 'TRANSLATE_SEGMENT_STREAM') return;
+      if (message.payload?.requestId !== requestId) return;
+      const seg = message.payload.segment;
+      if (seg) onSegment?.(seg as TranslationSegmentResult);
+    };
+    chrome.runtime.onMessage.addListener(listener);
+
+    try {
+      const resp = await sendMessageToBackground<TranslationResponse>({
+        type: 'TRANSLATE_SEGMENTS',
+        payload: { ...request, stream: true },
+      });
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Translation request failed');
+      }
+      return resp.data;
+    } finally {
+      chrome.runtime.onMessage.removeListener(listener);
+    }
+  }
+
   const resp = await sendMessageToBackground<TranslationResponse>({
     type: 'TRANSLATE_SEGMENTS',
     payload: request,

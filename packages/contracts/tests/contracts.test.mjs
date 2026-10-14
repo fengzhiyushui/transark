@@ -115,13 +115,24 @@ test('JobStatus and helpers', () => {
 test('Mock provider configs conform to dataPolicy expectations', () => {
   const localCompanion = mockTranslationProviderConfigs.find((c) => c.profileId === 'local-companion-service');
   assert.ok(localCompanion);
+  assert.equal(localCompanion.accessMode, 'local');
   assert.equal(localCompanion.dataPolicy, 'device-only');
   assert.equal(localCompanion.deploymentLocation, 'loopback');
   assert.equal(localCompanion.processingLocation, 'local');
 
   const cloud = mockTranslationProviderConfigs.find((c) => c.profileId === 'cloud-openai-byok');
   assert.ok(cloud);
+  assert.equal(cloud.accessMode, 'api');
   assert.equal(cloud.dataPolicy, 'allow-cloud');
+});
+
+test('Only two access modes are modeled: local and api', () => {
+  const modes = new Set(mockTranslationProviderConfigs.map((c) => c.accessMode));
+  for (const mode of modes) {
+    assert.ok(mode === 'local' || mode === 'api', `unexpected accessMode: ${mode}`);
+  }
+  assert.ok(modes.has('local'));
+  assert.ok(modes.has('api'));
 });
 
 test('Mock OCR, ASR and Job models', () => {

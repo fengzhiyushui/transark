@@ -1,23 +1,43 @@
-import type { TranslationUnit } from './dom-walker';
-import type { TranslationRequest, TranslationResponse } from '@translate/contracts';
+import type { TranslationUnit } from './dom-walker.ts';
+import type {
+  TranslationRequest,
+  TranslationResponse,
+  TranslationSegmentResult,
+} from '@translate/contracts';
 
 export interface PriorityQueueOptions {
   batchSize?: number;
   concurrency?: number;
+  /** 失败重试次数（不含首次），默认 2 */
+  maxRetries?: number;
+  /** 重试基础退避毫秒（指数退避），默认 400 */
+  retryBaseDelayMs?: number;
   onBatchTranslated?: (response: TranslationResponse, units: TranslationUnit[]) => void;
+  /** 单段增量回填（流式时逐段触发） */
+  onSegmentTranslated?: (unit: TranslationUnit, segment: TranslationSegmentResult) => void;
   onError?: (err: Error, units: TranslationUnit[]) => void;
   onProgress?: (completed: number, total: number) => void;
-  translateFn: (request: TranslationRequest, signal?: AbortSignal) => Promise<TranslationResponse>;
+  translateFn: (
+    request: TranslationRequest,
+    signal?: AbortSignal,
+    onSegment?: (segment: TranslationSegmentResult) => void
+  ) => Promise<TranslationResponse>;
 }
 
 interface QueuedItem {
   unit: TranslationUnit;
   inViewport: boolean;
   addedAt: number;
+  attempts: number;
 }
+
+/** 单段最大字符数：过长的段落单独成批，避免拖慢整批 */
+const LARGE_SEGMENT_CHARS = 1200;
 
 export class ViewportPriorityQueue {
   private queue: QueuedItem[] = [];
+  /** id → 队列项，避免在 observer 回调中做线性查找 */
+  private index = new Map<string, QueuedItem>();
   private processingSet = new Set<string>();
   private completedSet = new Set<string>();
   private intersectionObserver: IntersectionObserver | null = null;
@@ -29,16 +49,24 @@ export class ViewportPriorityQueue {
 
   private readonly batchSize: number;
   private readonly concurrency: number;
-  private readonly translateFn: (request: TranslationRequest, signal?: AbortSignal) => Promise<TranslationResponse>;
-  private readonly onBatchTranslated?: (response: TranslationResponse, units: TranslationUnit[]) => void;
-  private readonly onError?: (err: Error, units: TranslationUnit[]) => void;
-  private readonly onProgress?: (completed: number, total: number) => void;
+  private readonly maxRetries: number;
+  private readonly retryBaseDelayMs: number;
+  private readonly translateFn: PriorityQueueOptions['translateFn'];
+  private readonly onBatchTranslated?: PriorityQueueOptions['onBatchTranslated'];
+  private readonly onSegmentTranslated?: PriorityQueueOptions['onSegmentTranslated'];
+  private readonly onError?: PriorityQueueOptions['onError'];
+  private readonly onProgress?: PriorityQueueOptions['onProgress'];
 
   constructor(options: PriorityQueueOptions) {
+    // 批大小与并发度：批越大，请求数越少、RPM 压力越低；
+    // 并发度受上游配额约束，不宜盲目提高。
     this.batchSize = options.batchSize || 8;
     this.concurrency = options.concurrency || 2;
+    this.maxRetries = options.maxRetries ?? 2;
+    this.retryBaseDelayMs = options.retryBaseDelayMs ?? 400;
     this.translateFn = options.translateFn;
     this.onBatchTranslated = options.onBatchTranslated;
+    this.onSegmentTranslated = options.onSegmentTranslated;
     this.onError = options.onError;
     this.onProgress = options.onProgress;
 
@@ -56,7 +84,8 @@ export class ViewportPriorityQueue {
           const targetId = targetEl.getAttribute('data-trans-seg-id');
           if (!targetId) continue;
 
-          const item = this.queue.find((q) => q.unit.id === targetId);
+          // Map 索引查找，避免 O(n) 线性扫描
+          const item = this.index.get(targetId);
           if (item) {
             const wasInViewport = item.inViewport;
             item.inViewport = entry.isIntersecting;
@@ -96,11 +125,13 @@ export class ViewportPriorityQueue {
    * 添加待翻译单元列表
    */
   public enqueue(units: TranslationUnit[]) {
+    let added = false;
+
     for (const unit of units) {
       if (
         this.completedSet.has(unit.id) ||
         this.processingSet.has(unit.id) ||
-        this.queue.some((q) => q.unit.id === unit.id)
+        this.index.has(unit.id)
       ) {
         continue;
       }
@@ -111,15 +142,19 @@ export class ViewportPriorityQueue {
       // 观察其可见性
       this.intersectionObserver?.observe(unit.element);
 
-      this.queue.push({
+      const item: QueuedItem = {
         unit,
         inViewport: false,
         addedAt: Date.now(),
-      });
+        attempts: 0,
+      };
+      this.queue.push(item);
+      this.index.set(unit.id, item);
       this.totalCount++;
+      added = true;
     }
 
-    this.sortQueue();
+    if (added) this.sortQueue();
   }
 
   /**
@@ -149,62 +184,142 @@ export class ViewportPriorityQueue {
     this.stop();
     this.intersectionObserver?.disconnect();
     this.queue = [];
+    this.index.clear();
     this.processingSet.clear();
     this.completedSet.clear();
     this.totalCount = 0;
+  }
+
+  /**
+   * 取出一批待处理项。
+   *
+   * 若队首是超长段落，则只取这一条单独成批——避免一个长段落
+   * 拖慢整批中其他短段落的返回。
+   */
+  private takeBatch(): QueuedItem[] {
+    if (this.queue.length === 0) return [];
+
+    const first = this.queue[0];
+    if (first.unit.text.length >= LARGE_SEGMENT_CHARS) {
+      this.queue.shift();
+      this.index.delete(first.unit.id);
+      return [first];
+    }
+
+    const batch = this.queue.splice(0, this.batchSize);
+    for (const item of batch) {
+      this.index.delete(item.unit.id);
+    }
+    return batch;
   }
 
   private scheduleNext(targetLang: string = 'zh-CN', sourceLang: string = 'auto') {
     if (!this.isRunning || !this.abortController) return;
 
     while (this.activeWorkers < this.concurrency && this.queue.length > 0) {
-      // 取出一批
-      const batchItems = this.queue.splice(0, this.batchSize);
+      const batchItems = this.takeBatch();
       if (batchItems.length === 0) break;
 
-      const batchUnits = batchItems.map((b) => b.unit);
-      for (const u of batchUnits) {
-        this.processingSet.add(u.id);
+      for (const item of batchItems) {
+        this.processingSet.add(item.unit.id);
       }
 
       this.activeWorkers++;
-      this.dispatchBatch(batchUnits, targetLang, sourceLang);
+      this.dispatchBatch(batchItems, targetLang, sourceLang);
     }
   }
 
+  private async delay(ms: number, signal?: AbortSignal): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(new Error('aborted'));
+        },
+        { once: true }
+      );
+    });
+  }
+
   private async dispatchBatch(
-    units: TranslationUnit[],
+    batchItems: QueuedItem[],
     targetLang: string,
     sourceLang: string
   ) {
+    const units = batchItems.map((b) => b.unit);
     const requestId = `req-chunk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const request: TranslationRequest = {
       requestId,
       sourceLanguage: sourceLang,
       targetLanguage: targetLang,
-      segments: units.map((u) => ({
-        id: u.id,
-        text: u.text,
-      })),
+      segments: units.map((u) => ({ id: u.id, text: u.text })),
     };
 
-    try {
-      const response = await this.translateFn(request, this.abortController?.signal);
+    // 流式增量回填：只对属于本批的段落回调，且每段仅回填一次
+    const unitById = new Map(units.map((u) => [u.id, u]));
+    const filled = new Set<string>();
+    const onSegment = this.onSegmentTranslated
+      ? (segment: TranslationSegmentResult) => {
+          const unit = unitById.get(segment.id);
+          if (!unit || filled.has(segment.id)) return;
+          filled.add(segment.id);
+          this.onSegmentTranslated?.(unit, segment);
+        }
+      : undefined;
 
-      for (const u of units) {
-        this.processingSet.delete(u.id);
-        this.completedSet.add(u.id);
-        this.intersectionObserver?.unobserve(u.element);
+    try {
+      const response = await this.translateFn(request, this.abortController?.signal, onSegment);
+
+      for (const item of batchItems) {
+        this.processingSet.delete(item.unit.id);
+        this.completedSet.add(item.unit.id);
+        this.intersectionObserver?.unobserve(item.unit.element);
       }
 
-      this.onBatchTranslated?.(response, units);
+      // 对未通过流式回填的段落统一补齐（含错误段）
+      const respMap = new Map(response.segments.map((s) => [s.id, s]));
+      const remaining = units.filter((u) => !filled.has(u.id));
+      if (remaining.length > 0) {
+        this.onBatchTranslated?.(
+          { ...response, segments: response.segments.filter((s) => respMap.has(s.id) && !filled.has(s.id)) },
+          remaining
+        );
+      }
+
       this.onProgress?.(this.completedSet.size, this.totalCount);
     } catch (err: any) {
-      console.error('[PriorityQueue] Batch translation failed:', err);
-      for (const u of units) {
-        this.processingSet.delete(u.id);
+      const isAbort = this.abortController?.signal.aborted;
+
+      // 协作式重试：指数退避，仅对未取消的失败生效
+      const retryable = batchItems.filter((item) => item.attempts < this.maxRetries);
+      if (!isAbort && retryable.length > 0) {
+        for (const item of retryable) {
+          item.attempts++;
+          this.processingSet.delete(item.unit.id);
+          this.queue.push(item);
+          this.index.set(item.unit.id, item);
+        }
+        this.sortQueue();
+
+        const backoff = this.retryBaseDelayMs * Math.pow(2, retryable[0].attempts - 1);
+        console.warn(
+          `[PriorityQueue] 批次失败，${backoff}ms 后重试 ${retryable.length} 段（第 ${retryable[0].attempts} 次）:`,
+          err?.message || err
+        );
+        try {
+          await this.delay(backoff, this.abortController?.signal);
+        } catch {
+          // 退避期间被取消
+        }
+      } else {
+        console.error('[PriorityQueue] Batch translation failed:', err);
+        for (const item of batchItems) {
+          this.processingSet.delete(item.unit.id);
+        }
+        this.onError?.(err instanceof Error ? err : new Error(String(err)), units);
       }
-      this.onError?.(err, units);
     } finally {
       this.activeWorkers--;
       if (this.isRunning) {

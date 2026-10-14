@@ -5,6 +5,7 @@ import { fetchAvailableModels } from '../src/adapters/model-fetcher';
 import type {
   ExtensionMessage,
   MessageResponse,
+  TranslateSegmentsPayload,
 } from '../src/messaging/protocol';
 import type {
   TranslationResponse,
@@ -22,8 +23,8 @@ export default defineBackground(() => {
   });
 
   // 统一消息总线处理
-  chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-    handleMessage(message)
+  chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
+    handleMessage(message, sender)
       .then((res) => sendResponse(res))
       .catch((err) => {
         console.error('[Background] Message handling error:', err);
@@ -38,7 +39,31 @@ export default defineBackground(() => {
   });
 });
 
-async function handleMessage(message: ExtensionMessage): Promise<MessageResponse<any>> {
+/** 把单个段落增量推送给发起翻译的标签页 */
+function pushSegmentToTab(
+  tabId: number | undefined,
+  requestId: string,
+  segment: { id: string; translation: string; error?: { code: string; message: string } }
+): void {
+  if (tabId === undefined) return;
+  try {
+    chrome.tabs
+      .sendMessage(tabId, {
+        type: 'TRANSLATE_SEGMENT_STREAM',
+        payload: { requestId, segment },
+      })
+      .catch(() => {
+        // 标签页可能已关闭或未注入 content script：忽略即可
+      });
+  } catch {
+    // 上下文失效时静默忽略，不影响最终结果返回
+  }
+}
+
+async function handleMessage(
+  message: ExtensionMessage,
+  sender?: chrome.runtime.MessageSender
+): Promise<MessageResponse<any>> {
   switch (message.type) {
     case 'PING':
       return { success: true, data: 'PONG' };
@@ -59,8 +84,7 @@ async function handleMessage(message: ExtensionMessage): Promise<MessageResponse
         return { success: false, error: 'Missing profile parameter for connection test' };
       }
       const { profile } = payload;
-      const settings = await loadSettings();
-      const provider = createTranslationProvider(profile, settings.mockDelayMs);
+      const provider = createTranslationProvider(profile);
       const testResult = await provider.testConnection();
       return { success: true, data: testResult };
     }
@@ -79,21 +103,31 @@ async function handleMessage(message: ExtensionMessage): Promise<MessageResponse
     }
 
     case 'TRANSLATE_SEGMENTS': {
-      const request = message.payload as TranslationRequest | undefined;
-      if (!request) {
+      const payload = message.payload as TranslateSegmentsPayload | undefined;
+      if (!payload) {
         return { success: false, error: 'Missing request payload for TRANSLATE_SEGMENTS' };
       }
       const settings = await loadSettings();
       let profile = await getActiveProfile();
 
       // 若请求指明了特定的 Profile ID 则寻找对应 Profile
-      if (request.profileId) {
-        const found = settings.profiles.find((p) => p.profileId === request.profileId);
+      if (payload.profileId) {
+        const found = settings.profiles.find((p) => p.profileId === payload.profileId);
         if (found) profile = found;
       }
 
-      const provider = createTranslationProvider(profile, settings.mockDelayMs);
-      const response: TranslationResponse = await provider.translate(request);
+      const provider = createTranslationProvider(profile);
+      const request = payload as TranslationRequest;
+
+      // 流式：把增量推回发起方所在标签页
+      const targetTabId = payload.tabId ?? sender?.tab?.id;
+      const onSegment =
+        payload.stream === true
+          ? (segment: { id: string; translation: string; error?: { code: string; message: string } }) =>
+              pushSegmentToTab(targetTabId, payload.requestId, segment)
+          : undefined;
+
+      const response: TranslationResponse = await provider.translate(request, undefined, onSegment);
 
       return {
         success: true,

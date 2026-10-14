@@ -38,62 +38,71 @@ const PRESET_TEMPLATES: {
   config: TranslationProviderConfig;
 }[] = [
   {
-    title: 'OpenAI 兼容协议 (DeepSeek / 本地)',
-    desc: '支持 DeepSeek、OpenAI、月之暗面及本地 Ollama/网关',
+    title: 'API 接入 · OpenAI 兼容',
+    desc: '覆盖 DeepSeek / Kimi / 通义 / 硅基流动 / vLLM / LM Studio 等绝大多数兼容端点',
     config: {
-      profileId: 'openai-compatible-preset',
+      profileId: 'api-openai-chat-preset',
       revision: 1,
-      name: 'OpenAI 兼容通用大模型',
+      name: 'API 接入 · OpenAI 兼容协议',
+      accessMode: 'api',
       protocol: 'openai-chat',
       baseUrl: 'https://api.deepseek.com/v1',
       model: 'deepseek-chat',
       auth: { type: 'bearer', apiKey: '' },
       dataPolicy: 'allow-cloud',
+      processingLocation: 'cloud',
       capabilities: { textTranslation: true, ocr: false, asr: false },
     },
   },
   {
-    title: 'Claude 官方协议 (Anthropic)',
-    desc: 'Anthropic Claude Messages 官方 API 接口',
+    title: 'API 接入 · Anthropic Messages',
+    desc: 'Claude 官方 Messages 协议，使用 x-api-key 鉴权',
     config: {
-      profileId: 'claude-official-preset',
+      profileId: 'api-anthropic-preset',
       revision: 1,
-      name: 'Claude 官方模型 (Anthropic)',
+      name: 'API 接入 · Anthropic Messages',
+      accessMode: 'api',
       protocol: 'anthropic-messages',
       baseUrl: 'https://api.anthropic.com/v1',
       model: 'claude-3-5-sonnet-20241022',
       auth: { type: 'api-key', apiKey: '' },
       dataPolicy: 'allow-cloud',
+      processingLocation: 'cloud',
       capabilities: { textTranslation: true, ocr: false, asr: false },
     },
   },
   {
-    title: 'Chrome 浏览器端侧翻译 (内置)',
-    desc: 'Chrome 128+ 实验性端侧 NPU/CPU 翻译，免配 0 延迟',
+    title: 'API 接入 · Google Gemini',
+    desc: 'Gemini generateContent 协议，使用 x-goog-api-key 鉴权',
     config: {
-      profileId: 'chrome-builtin-preset',
+      profileId: 'api-gemini-preset',
       revision: 1,
-      name: 'Chrome 浏览器端侧原生翻译',
-      protocol: 'chrome-builtin' as any,
-      baseUrl: 'chrome://builtin',
-      model: 'chrome-on-device-translator',
-      auth: { type: 'none' },
-      dataPolicy: 'device-only',
+      name: 'API 接入 · Google Gemini',
+      accessMode: 'api',
+      protocol: 'gemini-generate',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      model: 'gemini-2.5-flash',
+      auth: { type: 'api-key', apiKey: '' },
+      dataPolicy: 'allow-cloud',
+      processingLocation: 'cloud',
       capabilities: { textTranslation: true, ocr: false, asr: false },
     },
   },
   {
-    title: '内置极速模拟 (Offline Mock)',
-    desc: '无需任何外部依赖与显卡，瞬间返回拟真双语译文',
+    title: '本地接入 · 本机自建服务',
+    desc: '仅保留配置入口，底层适配尚未提供（当前版本会明确报不支持）',
     config: {
-      profileId: 'mock-offline-fast',
+      profileId: 'local-self-hosted-preset',
       revision: 1,
-      name: '离线极速模拟驱动 (Mock)',
-      protocol: 'mock',
-      baseUrl: 'internal://mock',
-      model: 'mock-engine-v1',
-      auth: { type: 'none' },
+      name: '本地接入 · 本机自建服务',
+      accessMode: 'local',
+      protocol: 'openai-chat',
+      baseUrl: 'http://127.0.0.1:8000/v1',
+      model: '',
+      auth: { type: 'bearer', apiKey: '' },
       dataPolicy: 'device-only',
+      deploymentLocation: 'loopback',
+      processingLocation: 'local',
       capabilities: { textTranslation: true, ocr: false, asr: false },
     },
   },
@@ -148,7 +157,7 @@ export const App: React.FC = () => {
     const filtered = settings.profiles.filter((p) => p.profileId !== profileId);
     const newActive =
       settings.activeProfileId === profileId
-        ? filtered[0]?.profileId || 'mock-offline-default'
+        ? filtered[0]?.profileId || 'api-openai-chat'
         : settings.activeProfileId;
 
     const updated = await updateSettings({
@@ -251,7 +260,7 @@ export const App: React.FC = () => {
             }`}
           >
             <Sliders className="h-4 w-4" />
-            <span>常规偏好与模拟延迟</span>
+            <span>常规偏好</span>
           </button>
 
           <button
@@ -274,7 +283,7 @@ export const App: React.FC = () => {
               <div>
                 <h2 className="text-sm font-bold text-slate-900">翻译服务驱动列表</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  支持本地离线大模型 (Ollama)、伴随推理服务、OpenAI 兼容端点及内置 Mock
+                  仅两种接入方式：本地接入（暂未适配）与 API 接入（OpenAI 兼容 / Responses / Anthropic / Gemini）
                 </p>
               </div>
 
@@ -285,12 +294,14 @@ export const App: React.FC = () => {
                     setEditingProfile({
                       profileId: `profile-${Date.now()}`,
                       revision: 1,
-                      name: '自定义翻译服务',
+                      name: '自定义 API 接入',
+                      accessMode: 'api',
                       protocol: 'openai-chat',
-                      baseUrl: 'http://127.0.0.1:8000/v1',
-                      model: 'custom-model',
+                      baseUrl: 'https://api.deepseek.com/v1',
+                      model: 'deepseek-chat',
                       auth: { type: 'bearer', apiKey: '' },
-                      dataPolicy: 'device-only',
+                      dataPolicy: 'allow-cloud',
+                      processingLocation: 'cloud',
                       capabilities: {
                         textTranslation: true,
                         ocr: false,
@@ -539,7 +550,7 @@ export const App: React.FC = () => {
                       <tr>
                         <td className="px-4 py-3 font-semibold text-emerald-700">device-only</td>
                         <td className="px-4 py-3">⭐⭐⭐⭐⭐ 最高安全</td>
-                        <td className="px-4 py-3 text-slate-600">本地 Ollama / 本地 Python 引擎 / 敏感机密文档</td>
+                        <td className="px-4 py-3 text-slate-600">本机 / 内网自建推理服务、敏感机密文档</td>
                         <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">仅放行 127.0.0.1 及 ::1，禁止所有公网通信</td>
                       </tr>
                       <tr>
@@ -593,34 +604,6 @@ export const App: React.FC = () => {
                   <option value="fr">Français (fr)</option>
                   <option value="de">Deutsch (de)</option>
                 </select>
-              </div>
-
-              {/* 模拟延迟 (Mock 模式专用) */}
-              <div className="rounded-xl bg-slate-50/80 p-4 border border-slate-100 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-800">
-                    内置 Mock 模拟响应延迟 (ms)
-                  </label>
-                  <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                    {settings.mockDelayMs} ms
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1000"
-                  step="20"
-                  value={settings.mockDelayMs}
-                  onChange={async (e) => {
-                    const delay = parseInt(e.target.value, 10);
-                    const updated = await updateSettings({ mockDelayMs: delay });
-                    setSettings(updated);
-                  }}
-                  className="w-full accent-blue-600 cursor-pointer"
-                />
-                <p className="text-[11px] text-slate-500">
-                  设为 0 时模拟瞬间返回译文；设为 100-300ms 可模拟本地真实 GPU 推理延时，方便测试流式调度感。
-                </p>
               </div>
 
               {/* 自动翻译开关 */}

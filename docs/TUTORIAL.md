@@ -8,9 +8,9 @@
 1. [快速安装与构建](#1-快速安装与构建)
 2. [浏览器扩展三大界面详解](#2-浏览器扩展三大界面详解)
 3. [多模型接入配置实战](#3-多模型接入配置实战)
-   - [场景 A：零依赖内置 Mock 模式（离线演示）](#场景-a内置-mock-模式离线演示)
-   - [场景 B：本地 Ollama 引擎（纯本地大模型）](#场景-b本地-ollama-引擎纯本地大模型)
-   - [场景 C：云端大模型 BYOK 接入（OpenAI / DeepSeek 等）](#场景-c云端大模型-byok-接入openai--deepseek-等)
+   - [场景 A：OpenAI 兼容 API 接入（推荐，覆盖面最广）](#场景-aopenai-兼容-api-接入推荐覆盖面最广)
+   - [场景 B：Anthropic / Gemini 协议接入](#场景-banthropic--gemini-协议接入)
+   - [场景 C：本地接入（当前版本暂未提供底层适配）](#场景-c本地接入当前版本暂未提供底层适配)
    - [场景 D：本地伴随服务联动（文档解析与 ASR）](#场景-d本地伴随服务联动文档解析与-asr)
 4. [核心功能实战演练](#4-核心功能实战演练)
    - [实战 1：网页双语对照阅读与撤销恢复](#实战-1网页双语对照阅读与撤销恢复)
@@ -58,7 +58,7 @@ pnpm --filter @translate/extension build
 ### 2.1 Popup 弹窗（日常操作控制台）
 点击浏览器工具栏中的「译舟」图标，即可弹出浮窗：
 - **翻译总开关**：一键开启或关闭当前标签页的网页翻译。
-- **活跃配置切换**：快速在本地 Mock、Ollama、云端 API 等不同服务配置间切换。
+- **活跃配置切换**：快速在不同 API 接入配置（OpenAI 兼容 / Anthropic / Gemini）间切换。
 - **目标语言**：支持切换至中文（简体）、英语、日语、韩语等。
 - **实时进度条**：显示当前页面已翻译段落数、待处理段落数与总段落数。
 - **一键撤销 / 恢复**：
@@ -68,11 +68,16 @@ pnpm --filter @translate/extension build
 ### 2.2 Options 设置中心（模型与安全策略配置）
 右键扩展图标选择「选项」，或在 Popup 弹窗中点击齿轮图标：
 - **添加/编辑 Profile**：
-  - `Profile ID`：唯一标识（如 `my-ollama`, `deepseek-chat`）。
-  - `协议选择`：`openai-chat`（OpenAI 兼容）、`ollama`（Ollama 原生）、`mock`（本地存根）。
-  - `Base URL`：服务根地址（如 `http://localhost:11434` 或 `https://api.openai.com/v1`）。
+  - `接入方式`：仅两种——**本地接入**（底层适配暂未提供）与 **API 接入**。
+  - `Profile ID`：唯一标识（如 `api-openai-chat`, `deepseek-chat`）。
+  - `API 协议`（选择 API 接入时出现）：
+    - `openai-chat`：OpenAI Chat Completions，**事实标准**，兼容 DeepSeek / Kimi / 通义 / 硅基流动 / vLLM / One-API 等绝大多数网关；
+    - `openai-responses`：OpenAI Responses API（`/v1/responses`）；
+    - `anthropic-messages`：Anthropic Messages API；
+    - `gemini-generate`：Google Gemini `generateContent`。
+  - `Base URL`：服务根地址（如 `https://api.deepseek.com/v1`）。
   - `API Key`：鉴权令牌（保存在浏览器隔离的本地存储中）。
-  - `模型名称`：填入对应模型 ID（如 `qwen2.5:7b`、`gpt-4o-mini`）。
+  - `模型名称`：可点击「获取模型」一键拉取该服务的可用模型列表并下拉选择；拉取失败（如浏览器跨域限制）时可直接手动填写模型 ID。
   - `数据策略 (Data Policy)`：
     - `device-only`：严禁外网，仅允许回环地址；
     - `allow-lan`：允许内网服务器与网关；
@@ -89,32 +94,50 @@ pnpm --filter @translate/extension build
 
 ## 3. 多模型接入配置实战
 
-### 场景 A：内置 Mock 模式（离线演示）
-无需启动任何后台服务或模型，开箱即用：
-1. 打开扩展设置页面，默认已激活 `default-mock` 配置。
-2. 在任意英文页面点击「开启翻译」，系统将利用内置的高性能启发式词典生成逼真的模拟双语排版。
-3. 可以在设置中心中调节「模拟往返延迟（0~1000ms）」，体验不同网络环境下的视口优先加载动画。
+### 场景 A：OpenAI 兼容 API 接入（推荐，覆盖面最广）
+
+绝大多数国内外模型服务都提供 OpenAI Chat Completions 兼容端点，因此这是首选协议。
+
+1. **在译舟设置中心中添加 Profile**：
+   - 接入方式：`API 接入`
+   - API 协议：`openai-chat`
+   - Profile 名称：`DeepSeek`
+   - Base URL：`https://api.deepseek.com/v1`
+   - API Key：填入你在该平台申请的密钥
+2. **获取并选择模型**：点击「获取模型」按钮，扩展会请求 `{BaseUrl}/models` 并列出可用模型，从下拉列表中选择即可。若拉取失败，也可直接手动填写模型 ID（如 `deepseek-chat`）。
+3. **数据策略**：选择 `allow-cloud`（允许公网云端）。
+4. **点击「测试连通性」**：显示连接成功且测得往返时延与译文样本后，点击「保存并设为当前活跃 Profile」。
+
+> **其他常见服务示例**
+> | 服务 | Base URL | 模型示例 |
+> |---|---|---|
+> | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+> | 硅基流动 (SiliconFlow) | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` |
+> | 月之暗面 Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+> | 自建 vLLM / One-API 网关 | `http://127.0.0.1:8000/v1` | 你部署的模型名 |
+>
+> 自建网关指向回环地址时，可将数据策略设为 `device-only`；指向内网服务器时用 `allow-lan`。
 
 ---
 
-### 场景 B：本地 Ollama 引擎（纯本地大模型）
-适用于注重数据隐私、本地具备 GPU/NPU 算力的用户：
+### 场景 B：Anthropic / Gemini 协议接入
 
-1. **本地启动 Ollama 并拉取模型**：
-   ```bash
-   # 安装并启动 Ollama
-   ollama serve
+这两家不遵循 OpenAI 规范，需选择对应协议：
 
-   # 拉取推荐的轻量级中英翻译模型
-   ollama pull qwen2.5:7b
-   ```
-2. **在译舟设置中心中添加 Profile**：
-   - Profile 名称：`本地 Ollama Qwen`
-   - 协议类型：`ollama`
-   - 服务根地址：`http://127.0.0.1:11434`
-   - 目标模型：`qwen2.5:7b`
-   - 数据策略：`device-only`（仅限本机计算）
-3. **点击「测试连通性」**：显示连接成功且测得本地推理时延后，点击「保存并设为当前活跃 Profile」。
+- **Anthropic**：协议选 `anthropic-messages`，Base URL 填 `https://api.anthropic.com/v1`，模型如 `claude-3-5-sonnet-20241022`。扩展会自动携带 `anthropic-version` 版本头与浏览器直连所需的 `anthropic-dangerous-direct-browser-access` 头。
+- **Google Gemini**：协议选 `gemini-generate`，Base URL 填 `https://generativelanguage.googleapis.com/v1beta`，模型如 `gemini-2.5-flash`。
+
+> **提示**：Anthropic 与 Gemini 官方未开放浏览器可访问的 `/models` 列举端点，因此「获取模型」会降级为内置候选列表供选择，你也可以直接手动输入模型 ID。
+
+---
+
+### 场景 C：本地接入（当前版本暂未提供底层适配）
+
+设置中心保留了**本地接入**入口，但底层适配器尚未提供。选择本地接入后保存并翻译时，会明确抛出 `MODEL_UNAVAILABLE` 并提示「本地接入的底层适配尚未提供」。
+
+这是**刻意的设计**：宁可明确报错，也不伪装成功或静默回退到云端——否则你会误以为本地推理已经生效，而实际上数据可能已经离开了本机。
+
+若你现在就想在本机运行模型，可行做法是：用 **Ollama**（其提供 OpenAI 兼容入口 `http://127.0.0.1:11434/v1`）或 **vLLM / LM Studio** 等启动本地服务，然后在译舟里选择 **API 接入 + `openai-chat` 协议**，Base URL 填本地回环地址，数据策略设为 `device-only`。这样既走了已适配的路径，又能保证请求不出本机。
 
 ---
 
@@ -180,13 +203,15 @@ pnpm --filter @translate/extension build
 
 译舟内置了严格的物理级出口守卫（`NetworkGuard`），你可以按照以下步骤验证其全离线可靠性：
 
-1. 确保已将 Profile 切换为 `default-mock` 或 `本地 Ollama`，并将数据策略设为 `device-only`。
+1. 将一个**指向本机**的 Profile 设为活跃（例如本地 OpenAI 兼容服务 `http://127.0.0.1:11434/v1`），并将数据策略设为 `device-only`。
 2. **彻底断开电脑网络**（拔掉网线并关闭 Wi-Fi）。
 3. 在浏览器中打开本地已加载的网页或离线文档。
 4. 执行翻译：
-   - 本地段落依然能正常提取并输出双语对照；
+   - 若本机服务在运行，段落能正常提取并输出双语对照，全程不出本机；
    - 查看浏览器控制台（F12 -> Network），确认**绝对没有**向外部公网发送任何网络请求；
    - 若服务配置被错误配置了云端地址，`NetworkGuard` 将立即阻断该请求并返回 `POLICY_VIOLATION` 错误，绝不进行隐式回退。
+
+> **注意**：`device-only` 约束的是**网络出口**，不承诺「离线可翻译」。若使用云端 API 接入并设为 `device-only`，请求会被守卫正常拦截——这是预期行为。真正离线可用的前提是本机确有推理服务在运行。
 
 ---
 
@@ -198,8 +223,20 @@ pnpm --filter @translate/extension build
 ### Q2: 翻译后网页部分富文本按钮点击无反应或排版错乱？
 **A**: 译舟采用非侵入式架构，译文以兄弟节点追加在原标签之后，不会修改宿主标签的原生 DOM 树与事件绑定。如果目标网站有严格的 CSS flex 布局导致溢出，可以在设置中切换为「悬浮气泡翻译模式」或点击一键撤销。
 
-### Q3: 本地 Ollama 连接失败，报 `NETWORK_ERROR`？
-**A**: 
-1. 检查本地是否已运行 `ollama serve`；
-2. 确认 `http://127.0.0.1:11434` 在浏览器地址栏中是否能够访问并显示 `Ollama is running`；
-3. 如果是在 macOS / Linux 环境中，请确认 Ollama 允许被浏览器扩展跨域访问（可配置环境变量 `OLLAMA_ORIGINS="chrome-extension://*"`）。
+### Q3: 连接本地服务失败，报 `NETWORK_ERROR`？
+**A**:
+1. 检查本地服务是否已启动（如 `ollama serve`，或你的 vLLM / LM Studio 服务）；
+2. 确认地址在浏览器中可访问（Ollama 用 `http://127.0.0.1:11434`，注意 Base URL 需带 `/v1` 后缀）；
+3. 如果是在 macOS / Linux 环境中，请确认服务允许被浏览器扩展跨域访问（Ollama 可配置环境变量 `OLLAMA_ORIGINS="chrome-extension://*"`）。
+
+### Q4: 选择「本地接入」后翻译报 `MODEL_UNAVAILABLE`？
+**A**: 这是预期行为。当前版本**仅提供 API 接入的底层适配**，本地接入只保留了配置入口，尚未实现实际调用。扩展不会伪装成功或静默回退云端。请改用「API 接入」并选择 `openai-chat` 协议，把 Base URL 指向本机兼容服务即可。
+
+### Q5: 「获取模型」拉取列表失败怎么办？
+**A**: 部分服务未开放浏览器可访问的 `/models` 端点（受 CORS 限制），或需要特定鉴权头。此时可直接**手动输入模型 ID**，不影响正常翻译。
+
+### Q6: 翻译速度慢，如何优化？
+**A**: 按影响程度排序：
+1. **换用低首字延迟的模型**：翻译任务输入输出都短，**首 token 延迟（TTFT）比吞吐更关键**。优先选 `*-mini` / `*-flash` / `*-turbo` 这类轻量模型；**避免推理模型**（如 o1 / R1 系列），它们会先生成大段思维链，延迟可能是普通模型的数十倍。
+2. **提升账号配额**：云端 API 普遍按 RPM + TPM 双限，并发达到配额上限后会触发 `429`。这是云端场景的主要天花板。
+3. 译舟已默认启用**流式逐段回填**：每段一到达就立即显示，无需等待整批完成。

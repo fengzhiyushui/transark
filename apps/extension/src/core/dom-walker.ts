@@ -73,12 +73,33 @@ export function isElementIgnored(el: Element): boolean {
 }
 
 /**
- * 判断元素在页面中当前是否可见
+ * 判断元素在页面中当前是否可见。
+ *
+ * 性能要点：`getComputedStyle` 会强制样式重算（forced reflow），
+ * 在长页面上对数百个元素逐个调用可能造成 10–100ms 级主线程阻塞。
+ * 因此这里改为：
+ *  1. 先用最廉价的 `isConnected` / `offsetWidth|offsetHeight` 判定；
+ *  2. 仅当尺寸为 0（可能是隐藏，也可能是仿真环境无渲染管线）时，
+ *     才回退到 `getComputedStyle`。
+ *
+ * 这样在真实浏览器中，绝大多数可见元素都不需要触碰 computedStyle。
  */
 export function isElementVisible(el: HTMLElement): boolean {
   if (!el.isConnected) return false;
 
-  // 1. 样式显式隐藏检查
+  // 1. 廉价路径：有布局尺寸即视为可见（读取 offsetWidth 会触发布局，
+  //    但比 getComputedStyle 的全量样式解析便宜得多）
+  const hasDimensions = el.offsetWidth > 0 || el.offsetHeight > 0;
+  if (hasDimensions) {
+    return true;
+  }
+
+  // 2. 尺寸为 0：可能是真实隐藏，也可能是无渲染管线的仿真环境
+  const rect = el.getBoundingClientRect?.();
+  if (rect && (rect.width > 0 || rect.height > 0)) {
+    return true;
+  }
+
   if (typeof window !== 'undefined' && window.getComputedStyle) {
     const style = window.getComputedStyle(el);
     if (style.display === 'none') return false;
@@ -86,18 +107,8 @@ export function isElementVisible(el: HTMLElement): boolean {
     if (parseFloat(style.opacity) === 0) return false;
   }
 
-  // 2. 在具有排版布局的真实浏览器中，检查尺寸
-  const hasDimensions = el.offsetWidth > 0 || el.offsetHeight > 0;
-  if (hasDimensions) {
-    return true;
-  }
-
-  const rect = el.getBoundingClientRect?.();
-  if (rect && (rect.width > 0 || rect.height > 0)) {
-    return true;
-  }
-
-  // 3. 在无渲染管线的仿真环境（如 Happy-DOM / JSDOM，所有节点尺寸均为 0 时），以 computedStyle 显示为准
+  // 3. 无尺寸但样式未显式隐藏：在 Happy-DOM / JSDOM 等仿真环境中
+  //    所有节点尺寸均为 0，此时以样式为准
   return true;
 }
 

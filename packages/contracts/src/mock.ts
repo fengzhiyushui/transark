@@ -38,7 +38,7 @@ export const mockTranslationRequest: TranslationRequest = {
   sourceLanguage: 'en',
   targetLanguage: 'zh-CN',
   segments: mockTranslationSegments,
-  profileId: 'local-ollama-qwen',
+  profileId: 'local-self-hosted',
   revision: 1,
   options: {
     temperature: 0.2,
@@ -64,7 +64,7 @@ export const mockTranslationResponse: TranslationResponse = {
     },
   ],
   resolvedEngine: {
-    id: 'ollama/qwen2.5:7b',
+    id: 'local/self-hosted',
     revision: 'engine-rev-20261010',
     actualLocation: 'local',
   },
@@ -78,11 +78,12 @@ export const mockTranslationResponse: TranslationResponse = {
 
 // ==================== 2. 提供者配置 Mock ====================
 
-/** 本地伴随服务（device-only，全能力） */
+/** 本地接入：本机伴随服务（device-only） */
 export const mockLocalCompanionConfig: TranslationProviderConfig = {
   profileId: 'local-companion-service',
   revision: 1,
   name: 'Local Companion Service (Loopback)',
+  accessMode: 'local',
   protocol: 'custom-translate',
   baseUrl: 'http://127.0.0.1:8765/v1',
   model: 'built-in-hybrid',
@@ -112,13 +113,14 @@ export const mockLocalCompanionConfig: TranslationProviderConfig = {
   enabled: true,
 };
 
-/** 本地 Ollama 实例 (device-only) */
+/** 本地接入：本机自建推理服务 (device-only) */
 export const mockOllamaConfig: TranslationProviderConfig = {
-  profileId: 'local-ollama-qwen',
+  profileId: 'local-self-hosted',
   revision: 1,
-  name: 'Ollama Local (Qwen 2.5 7B)',
-  protocol: 'ollama',
-  baseUrl: 'http://127.0.0.1:11434',
+  name: 'Local Self-hosted (OpenAI-compatible)',
+  accessMode: 'local',
+  protocol: 'openai-chat',
+  baseUrl: 'http://127.0.0.1:11434/v1',
   model: 'qwen2.5:7b',
   auth: {
     type: 'none',
@@ -145,6 +147,7 @@ export const mockLanGatewayConfig: TranslationProviderConfig = {
   profileId: 'lan-self-hosted-gateway',
   revision: 1,
   name: 'LAN Gateway (vLLM)',
+  accessMode: 'api',
   protocol: 'openai-chat',
   baseUrl: 'http://192.168.1.120:8000/v1',
   model: 'Qwen/Qwen2.5-14B-Instruct',
@@ -173,6 +176,7 @@ export const mockCloudOpenAiConfig: TranslationProviderConfig = {
   profileId: 'cloud-openai-byok',
   revision: 1,
   name: 'OpenAI Cloud (BYOK)',
+  accessMode: 'api',
   protocol: 'openai-responses',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',

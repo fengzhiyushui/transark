@@ -1,181 +1,165 @@
-import type {
-  TranslationRequest,
-  TranslationResponse,
-  TranslationProviderConfig,
-  TranslationSegmentResult,
-} from '@translate/contracts';
-import {
-  alignTranslationResults,
-  ErrorCode,
-  createAppError,
-} from '@translate/contracts';
-import type { TranslationProvider } from './types';
+import type { TranslationRequest } from '@translate/contracts';
+import { ApiAdapterBase, type ResolvedLocation } from './base-adapter.ts';
 
-export class OpenAIChatAdapter implements TranslationProvider {
-  public readonly config: TranslationProviderConfig;
-
-  constructor(config: TranslationProviderConfig) {
-    this.config = config;
+/**
+ * OpenAI 协议适配器，覆盖两种官方形态：
+ *
+ * - `openai-chat` → `POST {base}/chat/completions`
+ *   事实标准，覆盖 DeepSeek、月之暗面 (Kimi)、通义千问、智谱、硅基流动、
+ *   百川、vLLM、LM Studio、One-API / New-API 等绝大多数兼容网关。
+ *
+ * - `openai-responses` → `POST {base}/responses`
+ *   OpenAI 新一代 Responses API，入参为 `input` 消息数组，
+ *   输出文本位于 `output[].content[].text`（聚合 `output_text` 亦可）。
+ */
+export class OpenAIChatAdapter extends ApiAdapterBase {
+  private get isResponsesApi(): boolean {
+    return this.config.protocol === 'openai-responses';
   }
 
-  private resolveEndpoint(): string {
-    const rawBase = (this.config.baseUrl || 'https://api.openai.com/v1').trim().replace(/\/+$/, '');
-    if (rawBase.endsWith('/chat/completions')) {
-      return rawBase;
+  protected resolveEndpoint(): string {
+    const base = this.normalizedBase('https://api.openai.com/v1');
+    if (this.isResponsesApi) {
+      return base.endsWith('/responses') ? base : `${base}/responses`;
     }
-    return `${rawBase}/chat/completions`;
+    return base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
   }
 
-  private buildHeaders(): Record<string, string> {
+  protected buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...this.config.customHeaders,
     };
 
-    const apiKey = this.config.auth.apiKey || this.config.auth.token;
-    if (apiKey) {
+    const key = this.apiKey();
+    if (key) {
       if (this.config.auth.headerName) {
-        headers[this.config.auth.headerName] = apiKey;
+        headers[this.config.auth.headerName] = key;
       } else {
-        headers['Authorization'] = `Bearer ${apiKey}`;
+        headers['Authorization'] = `Bearer ${key}`;
       }
     }
 
     return headers;
   }
 
-  async translate(request: TranslationRequest, signal?: AbortSignal): Promise<TranslationResponse> {
-    const endpoint = this.resolveEndpoint();
-    const headers = this.buildHeaders();
-    const startTime = performance.now();
+  protected buildPayload(request: TranslationRequest): unknown {
+    const temperature = request.options?.temperature ?? 0.1;
+    const model = this.config.model;
 
-    const systemPrompt = `Translate each segment into ${request.targetLanguage}. Output ONLY a valid JSON object matching {"segments":[{"id":"id","translation":"translated_text"}]}. Do NOT include markdown code fences (\`\`\`json) or any explanations.`;
+    if (this.isResponsesApi) {
+      // Responses API：instructions + input，结构化输出用 text.format
+      return {
+        model,
+        instructions: this.systemPrompt(request),
+        input: JSON.stringify({ segments: this.segmentPayload(request) }),
+        temperature,
+        text: { format: { type: 'json_object' } },
+      };
+    }
 
-    const userPayload = {
-      segments: request.segments.map((s) => ({ id: s.id, text: s.text })),
-      targetLanguage: request.targetLanguage,
-    };
-
-    const bodyPayload: Record<string, any> = {
-      model: this.config.model || 'gpt-4o-mini',
+    // Chat Completions：messages，配合 response_format 约束 JSON
+    const payload: Record<string, unknown> = {
+      model,
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: JSON.stringify(userPayload) },
+        { role: 'system', content: this.systemPrompt(request) },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            segments: this.segmentPayload(request),
+            targetLanguage: request.targetLanguage,
+          }),
+        },
       ],
-      temperature: request.options?.temperature ?? 0.1,
+      temperature,
     };
 
-    if (this.config.protocol === 'openai-responses') {
-      bodyPayload.response_format = { type: 'json_object' };
+    // 并非所有兼容网关都支持 response_format，仅在显式开启结构化输出时下发
+    if (this.config.capabilities?.structuredOutput) {
+      payload.response_format = { type: 'json_object' };
     }
 
-    let fetchResponse: Response;
-    try {
-      fetchResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(bodyPayload),
-        signal,
-      });
-    } catch (networkErr: any) {
-      if (signal?.aborted) {
-        throw createAppError(ErrorCode.CANCELLED, 'Translation request was cancelled');
+    return payload;
+  }
+
+  protected extractContent(json: any): string {
+    if (this.isResponsesApi) {
+      // 优先取官方聚合字段
+      if (typeof json?.output_text === 'string' && json.output_text) {
+        return json.output_text;
       }
-      throw createAppError(
-        ErrorCode.NETWORK_ERROR,
-        `Network error accessing OpenAI provider at ${endpoint}: ${networkErr.message}`,
-        { endpoint }
-      );
+      // 回退：遍历 output[].content[] 收集 text
+      const chunks: string[] = [];
+      for (const item of json?.output ?? []) {
+        for (const part of item?.content ?? []) {
+          if (typeof part?.text === 'string') {
+            chunks.push(part.text);
+          }
+        }
+      }
+      return chunks.join('');
     }
 
-    if (!fetchResponse.ok) {
-      let errText = '';
-      try {
-        errText = await fetchResponse.text();
-      } catch {
-        // ignore
-      }
-
-      const status = fetchResponse.status;
-      if (status === 401 || status === 403) {
-        throw createAppError(ErrorCode.AUTH_FAILED, `Authentication failed (${status}): ${errText}`);
-      }
-      if (status === 429) {
-        throw createAppError(ErrorCode.RATE_LIMITED, `Provider rate limit exceeded (429): ${errText}`);
-      }
-      throw createAppError(
-        ErrorCode.INTERNAL_ERROR,
-        `OpenAI translation request failed with HTTP ${status}: ${errText}`
-      );
+    // Chat Completions
+    const content = json?.choices?.[0]?.message?.content;
+    if (typeof content === 'string') {
+      return content;
     }
-
-    const json = await fetchResponse.json();
-    const rawContent: string = json.choices?.[0]?.message?.content || '';
-
-    // 解析并清洗可能的 markdown 代码块
-    let cleanedContent = rawContent.trim();
-    if (cleanedContent.startsWith('```json')) {
-      cleanedContent = cleanedContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanedContent.startsWith('```')) {
-      cleanedContent = cleanedContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    // 部分网关以数组形式返回 content parts
+    if (Array.isArray(content)) {
+      return content
+        .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+        .join('');
     }
+    return '';
+  }
 
-    let parsedSegments: TranslationSegmentResult[] = [];
-    try {
-      const parsedObj = JSON.parse(cleanedContent);
-      if (Array.isArray(parsedObj.segments)) {
-        parsedSegments = parsedObj.segments;
-      } else if (Array.isArray(parsedObj)) {
-        parsedSegments = parsedObj;
-      }
-    } catch (parseErr) {
-      throw createAppError(
-        ErrorCode.ALIGNMENT_MISMATCH,
-        `Failed to parse structured translation JSON from model output: ${rawContent}`
-      );
+  protected extractUsage(json: any): { promptTokens?: number; completionTokens?: number } {
+    if (this.isResponsesApi) {
+      return {
+        promptTokens: json?.usage?.input_tokens,
+        completionTokens: json?.usage?.output_tokens,
+      };
     }
-
-    // 严格重排与补齐
-    const alignedSegments = alignTranslationResults(request, {
-      requestId: request.requestId,
-      segments: parsedSegments,
-    });
-
-    const durationMs = Math.round(performance.now() - startTime);
-
     return {
-      requestId: request.requestId,
-      segments: alignedSegments,
-      resolvedEngine: {
-        id: this.config.model || 'openai-model',
-        revision: `openai-rev-${this.config.revision || 1}`,
-        actualLocation:
-          this.config.processingLocation === 'local' ||
-          this.config.processingLocation === 'lan' ||
-          this.config.processingLocation === 'cloud'
-            ? this.config.processingLocation
-            : 'cloud',
-      },
-      metrics: {
-        durationMs,
-        promptTokens: json.usage?.prompt_tokens,
-        completionTokens: json.usage?.completion_tokens,
-        cacheHit: false,
-      },
+      promptTokens: json?.usage?.prompt_tokens,
+      completionTokens: json?.usage?.completion_tokens,
     };
   }
 
-  async testConnection(signal?: AbortSignal): Promise<{ durationMs: number; sampleTranslation: string }> {
-    const testReq: TranslationRequest = {
-      requestId: 'test-openai-' + Date.now(),
-      sourceLanguage: 'en',
-      targetLanguage: 'zh-CN',
-      segments: [{ id: 'test-1', text: 'Hello, world!' }],
-    };
-    const res = await this.translate(testReq, signal);
-    return {
-      durationMs: res.metrics?.durationMs || 100,
-      sampleTranslation: res.segments[0]?.translation || '你好，世界！',
-    };
+  protected engineId(): string {
+    return this.config.model || 'openai-model';
+  }
+
+  protected actualLocation(): ResolvedLocation {
+    return this.inferLocation();
+  }
+
+  /**
+   * 两种形态的流式事件结构不同：
+   * - Chat Completions: `choices[0].delta.content`
+   * - Responses API:    `type === 'response.output_text.delta'` 的 `delta`
+   */
+  protected extractStreamDelta(payload: any): string | null {
+    if (this.isResponsesApi) {
+      if (payload?.type === 'response.output_text.delta' && typeof payload.delta === 'string') {
+        return payload.delta;
+      }
+      return null;
+    }
+
+    const delta = payload?.choices?.[0]?.delta?.content;
+    return typeof delta === 'string' ? delta : null;
+  }
+
+  protected buildStreamPayload(request: TranslationRequest): unknown {
+    const payload = this.buildPayload(request) as Record<string, unknown>;
+    payload.stream = true;
+
+    if (!this.isResponsesApi) {
+      // 部分兼容网关在 stream 模式下不支持 response_format，移除以免报错
+      delete payload.response_format;
+    }
+    return payload;
   }
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type {
   TranslationProviderConfig,
-  DataPolicy,
+  AccessMode,
   TranslationProtocol,
   AuthType,
 } from '@translate/contracts';
@@ -13,9 +13,7 @@ import {
   Key,
   Link as LinkIcon,
   Cpu,
-  ShieldCheck,
-  ChevronDown,
-  Sparkles,
+  Info,
   Download,
 } from 'lucide-react';
 
@@ -25,6 +23,44 @@ interface ConfigFormProps {
   onDelete?: (profileId: string) => void;
   onCancel?: () => void;
 }
+
+/** 各 API 协议的默认端点、模型与鉴权方式 */
+const PROTOCOL_PRESETS: Record<
+  string,
+  { baseUrl: string; model: string; authType: AuthType; policy: 'allow-cloud' | 'device-only' }
+> = {
+  'openai-chat': {
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    authType: 'bearer',
+    policy: 'allow-cloud',
+  },
+  'openai-responses': {
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    authType: 'bearer',
+    policy: 'allow-cloud',
+  },
+  'anthropic-messages': {
+    baseUrl: 'https://api.anthropic.com/v1',
+    model: 'claude-3-5-sonnet-20241022',
+    authType: 'api-key',
+    policy: 'allow-cloud',
+  },
+  'gemini-generate': {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-2.5-flash',
+    authType: 'api-key',
+    policy: 'allow-cloud',
+  },
+};
+
+const PROTOCOL_LABELS: Record<string, string> = {
+  'openai-chat': 'OpenAI 兼容 (Chat Completions) — DeepSeek / Kimi / 通义 / 硅基流动 / vLLM',
+  'openai-responses': 'OpenAI Responses API — 新一代 /v1/responses',
+  'anthropic-messages': 'Anthropic Messages — Claude 官方协议',
+  'gemini-generate': 'Google Gemini — generateContent',
+};
 
 export const ConfigForm: React.FC<ConfigFormProps> = ({
   initialConfig,
@@ -43,6 +79,58 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
     sampleTranslation?: string;
     error?: string;
   } | null>(null);
+
+  const isLocal = config.accessMode === 'local';
+
+  // 切换接入方式
+  const handleAccessModeChange = (mode: AccessMode) => {
+    setModelList([]);
+    setFetchError(null);
+    setTestResult(null);
+
+    if (mode === 'local') {
+      setConfig({
+        ...config,
+        accessMode: 'local',
+        baseUrl: config.baseUrl?.startsWith('http://127.0.0.1') ||
+          config.baseUrl?.startsWith('http://localhost')
+          ? config.baseUrl
+          : 'http://127.0.0.1:8000/v1',
+        dataPolicy: 'device-only',
+        deploymentLocation: 'loopback',
+        processingLocation: 'local',
+      });
+    } else {
+      const preset = PROTOCOL_PRESETS[config.protocol] || PROTOCOL_PRESETS['openai-chat'];
+      setConfig({
+        ...config,
+        accessMode: 'api',
+        protocol: (PROTOCOL_PRESETS[config.protocol] ? config.protocol : 'openai-chat') as TranslationProtocol,
+        baseUrl: preset.baseUrl,
+        model: config.model || preset.model,
+        dataPolicy: preset.policy,
+        deploymentLocation: 'cloud',
+        processingLocation: 'cloud',
+        auth: { ...config.auth, type: preset.authType },
+      });
+    }
+  };
+
+  // 切换 API 协议
+  const handleProtocolChange = (proto: string) => {
+    const preset = PROTOCOL_PRESETS[proto];
+    setModelList([]);
+    setFetchError(null);
+    setTestResult(null);
+    setConfig({
+      ...config,
+      protocol: proto as TranslationProtocol,
+      baseUrl: preset.baseUrl,
+      model: preset.model,
+      dataPolicy: preset.policy,
+      auth: { ...config.auth, type: preset.authType },
+    });
+  };
 
   // 拉取模型列表
   const handleFetchModels = async () => {
@@ -86,18 +174,19 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
     }
   };
 
-  const isBuiltin = config.protocol === 'chrome-builtin' || config.protocol === 'mock';
-  const isClaude = config.protocol === 'anthropic-messages';
+  const inputClass =
+    'mt-1.5 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 transition-all';
+  const monoInputClass = `${inputClass} font-mono`;
 
   return (
     <div className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
         <div>
           <h3 className="text-sm font-bold text-slate-900">
-            {config.profileId ? '编辑模型服务配置' : '新增通用模型配置'}
+            {initialConfig.name ? '编辑接入配置' : '新增接入配置'}
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            精简协议适配：支持 OpenAI (双协议)、Claude 官方协议及浏览器内置端侧引擎
+            仅支持两种接入方式：本地接入 与 API 接入
           </p>
         </div>
         <span className="font-mono text-[11px] text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
@@ -106,189 +195,173 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
       </div>
 
       <div className="space-y-4">
-        {/* 1. 基础配置 */}
+        {/* 1. 基础配置：名称 + 接入方式 */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-semibold text-slate-700">配置名称</label>
             <input
               type="text"
-              className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 transition-all"
+              className={inputClass}
               value={config.name}
               onChange={(e) => setConfig({ ...config, name: e.target.value })}
-              placeholder="例如：DeepSeek V3 / 本地 Ollama / Claude 3.5"
+              placeholder="例如：DeepSeek 官方 / 实验室网关"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700">通用协议类型</label>
-            <select
-              className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 text-xs font-medium text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-all"
-              value={config.protocol}
-              onChange={(e) => {
-                const proto = e.target.value as TranslationProtocol;
-                let defaultUrl = config.baseUrl;
-                let defaultModel = config.model;
-                let policy = config.dataPolicy;
-
-                if (proto === 'anthropic-messages') {
-                  defaultUrl = 'https://api.anthropic.com/v1';
-                  defaultModel = 'claude-3-5-sonnet-20241022';
-                  policy = 'allow-cloud';
-                } else if (proto === 'chrome-builtin') {
-                  defaultUrl = 'chrome://builtin';
-                  defaultModel = 'chrome-on-device-translator';
-                  policy = 'device-only';
-                } else if (proto === 'mock') {
-                  defaultUrl = 'internal://mock';
-                  defaultModel = 'mock-engine-v1';
-                  policy = 'device-only';
-                } else if (proto === 'openai-chat' || proto === 'openai-responses') {
-                  if (defaultUrl.startsWith('chrome:') || defaultUrl.startsWith('internal:')) {
-                    defaultUrl = 'https://api.deepseek.com/v1';
-                    defaultModel = 'deepseek-chat';
-                  }
-                  policy = defaultUrl.includes('127.0.0.1') || defaultUrl.includes('localhost') ? 'device-only' : 'allow-cloud';
-                }
-
-                setConfig({
-                  ...config,
-                  protocol: proto,
-                  baseUrl: defaultUrl,
-                  model: defaultModel,
-                  dataPolicy: policy,
-                  auth: {
-                    ...config.auth,
-                    type: proto === 'chrome-builtin' || proto === 'mock' ? 'none' : isClaude ? 'api-key' : 'bearer',
-                  },
-                });
-                setModelList([]);
-                setFetchError(null);
-              }}
-            >
-              <option value="openai-chat">OpenAI 标准 ChatCompletions (推荐：DeepSeek/OpenAI/本地网关)</option>
-              <option value="openai-responses">OpenAI 新一代 Structured Outputs / Responses 协议</option>
-              <option value="anthropic-messages">Claude 官方协议 (Anthropic Messages API)</option>
-              <option value="chrome-builtin">Chrome 浏览器端侧极速翻译 (内置/免配置)</option>
-              <option value="mock">内置离线模拟 (Mock 免配极速体验)</option>
-            </select>
+            <label className="block text-xs font-semibold text-slate-700">接入方式</label>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {(['local', 'api'] as AccessMode[]).map((mode) => {
+                const active = config.accessMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => handleAccessModeChange(mode)}
+                    className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all cursor-pointer ${
+                      active
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20'
+                        : 'border-slate-300 bg-slate-50/50 text-slate-600 hover:border-slate-400'
+                    }`}
+                  >
+                    {mode === 'local' ? '本地接入' : 'API 接入'}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* 2. BaseUrl 与 API Key (若非内置引擎) */}
-        {!isBuiltin && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <LinkIcon className="h-3.5 w-3.5 text-blue-600" />
-                <span>API 根地址 (BaseUrl)</span>
-              </label>
-              <input
-                type="text"
-                className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 transition-all"
-                value={config.baseUrl}
-                onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
-                placeholder="https://api.deepseek.com/v1 或 http://127.0.0.1:11434"
-              />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Key className="h-3.5 w-3.5 text-amber-500" />
-                <span>API 密钥 (API Key，本地端点可留空)</span>
-              </label>
-              <input
-                type="password"
-                className="mt-1.5 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-500 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 transition-all"
-                value={config.auth?.apiKey || config.auth?.token || ''}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    auth: {
-                      ...config.auth,
-                      apiKey: e.target.value,
-                      token: e.target.value,
-                    },
-                  })
-                }
-                placeholder="sk-..."
-              />
-            </div>
-          </div>
-        )}
-
-        {/* 3. 模型标识 (支持一键拉取并下拉选择) */}
-        {!isBuiltin && (
-          <div className="rounded-xl bg-slate-50/80 p-4 border border-slate-100 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Cpu className="h-3.5 w-3.5 text-indigo-600" />
-                <span>模型标识 (Model)</span>
-              </label>
-
-              <button
-                type="button"
-                onClick={handleFetchModels}
-                disabled={fetchingModels}
-                className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Download className={`h-3 w-3 ${fetchingModels ? 'animate-bounce' : ''}`} />
-                <span>{fetchingModels ? '正在拉取...' : '点击一键拉取可用模型 ⚡'}</span>
-              </button>
-            </div>
-
-            {/* 若获取到了模型列表，展示下拉框，同时允许手动输入 */}
-            {modelList.length > 0 ? (
-              <div className="space-y-1.5">
-                <select
-                  value={config.model}
-                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                  className="block w-full rounded-xl border border-blue-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 cursor-pointer shadow-2xs"
-                >
-                  {modelList.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span className="text-emerald-700 font-medium">✓ 已成功拉取到 {modelList.length} 个模型</span>
-                  <button
-                    type="button"
-                    onClick={() => setModelList([])}
-                    className="text-slate-400 hover:text-slate-600 underline cursor-pointer"
-                  >
-                    切换为手动输入
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <input
-                type="text"
-                className="block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 transition-all"
-                value={config.model}
-                onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                placeholder="例如 deepseek-chat, gpt-4o-mini, qwen2.5:7b, claude-3-5-sonnet-20241022"
-              />
-            )}
-
-            {fetchError && (
-              <p className="text-[11px] text-rose-600 font-medium">{fetchError}</p>
-            )}
-          </div>
-        )}
-
-        {/* 浏览器内置引擎提示 */}
-        {config.protocol === 'chrome-builtin' && (
-          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3.5 text-xs text-blue-900 space-y-1">
+        {/* 本地接入说明 */}
+        {isLocal && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 space-y-1">
             <div className="font-bold flex items-center gap-1.5">
-              <Sparkles className="h-4 w-4 text-blue-600" />
-              <span>Chrome 实验性端侧翻译引擎 (免配置极速)</span>
+              <Info className="h-4 w-4 text-amber-600" />
+              <span>本地接入的底层适配尚未提供</span>
             </div>
-            <p className="text-[11px] text-blue-800/80 leading-relaxed">
-              利用 Chrome 128+ 内置端侧 NPU/CPU 翻译模型，直接在本地设备执行翻译，0 外部网络、0 额外开销。若未启用可在地址栏访问 <code className="bg-white/70 px-1 rounded font-mono">chrome://flags/#translation-api</code> 开启体验。
+            <p className="text-[11px] text-amber-800/90 leading-relaxed">
+              本版本仅提供本地接入的配置入口，尚未实现底层引擎适配，实际翻译会明确返回
+              <code className="mx-auto bg-white/70 px-1 rounded font-mono">MODEL_UNAVAILABLE</code>
+              ，不会静默回退到任何云端服务。请先使用「API 接入」。
             </p>
           </div>
         )}
+
+        {/* 2. API 接入：协议选择 */}
+        {!isLocal && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">API 协议</label>
+            <select
+              className={`${inputClass} cursor-pointer`}
+              value={String(config.protocol)}
+              onChange={(e) => handleProtocolChange(e.target.value)}
+            >
+              {Object.keys(PROTOCOL_PRESETS).map((proto) => (
+                <option key={proto} value={proto}>
+                  {PROTOCOL_LABELS[proto]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* 3. 端点与密钥 */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <LinkIcon className="h-3.5 w-3.5 text-blue-600" />
+              <span>API 根地址 (BaseUrl)</span>
+            </label>
+            <input
+              type="text"
+              className={monoInputClass}
+              value={config.baseUrl}
+              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
+              placeholder="https://api.deepseek.com/v1"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Key className="h-3.5 w-3.5 text-amber-500" />
+              <span>API 密钥 (API Key)</span>
+            </label>
+            <input
+              type="password"
+              className={monoInputClass}
+              value={config.auth?.apiKey || config.auth?.token || ''}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  auth: {
+                    ...config.auth,
+                    apiKey: e.target.value,
+                    token: e.target.value,
+                  },
+                })
+              }
+              placeholder="sk-..."
+            />
+          </div>
+        </div>
+
+        {/* 4. 模型获取与选择 */}
+        <div className="rounded-xl bg-slate-50/80 p-4 border border-slate-100 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <Cpu className="h-3.5 w-3.5 text-indigo-600" />
+              <span>模型 (Model)</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={handleFetchModels}
+              disabled={fetchingModels}
+              className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Download className={`h-3 w-3 ${fetchingModels ? 'animate-bounce' : ''}`} />
+              <span>{fetchingModels ? '正在拉取...' : '获取可用模型 ⚡'}</span>
+            </button>
+          </div>
+
+          {modelList.length > 0 ? (
+            <div className="space-y-1.5">
+              <select
+                value={config.model}
+                onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                className="block w-full rounded-xl border border-blue-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 cursor-pointer shadow-2xs"
+              >
+                {modelList.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                <span className="text-emerald-700 font-medium">
+                  ✓ 已获取到 {modelList.length} 个模型
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setModelList([])}
+                  className="text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                >
+                  切换为手动输入
+                </button>
+              </div>
+            </div>
+          ) : (
+            <input
+              type="text"
+              className="block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 transition-all"
+              value={config.model}
+              onChange={(e) => setConfig({ ...config, model: e.target.value })}
+              placeholder="例如 deepseek-chat, gpt-4o-mini, claude-3-5-sonnet-20241022"
+            />
+          )}
+
+          {fetchError && <p className="text-[11px] text-rose-600 font-medium">{fetchError}</p>}
+        </div>
       </div>
 
       {/* 测试反馈 */}

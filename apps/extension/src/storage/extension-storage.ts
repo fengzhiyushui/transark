@@ -1,5 +1,5 @@
 import type { TranslationProviderConfig, DisplayMode } from '@translate/contracts';
-import { DEFAULT_PROFILES, DEFAULT_OPENAI_PROFILE, DEFAULT_MOCK_PROFILE } from './default-configs';
+import { DEFAULT_PROFILES, DEFAULT_OPENAI_CHAT_PROFILE } from './default-configs';
 
 export interface ExtensionSettings {
   activeProfileId: string;
@@ -10,11 +10,10 @@ export interface ExtensionSettings {
   bilingualDisplay: boolean;
   displayMode: DisplayMode;
   showFloatingControl: boolean;
-  mockDelayMs: number;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
-  activeProfileId: DEFAULT_OPENAI_PROFILE.profileId,
+  activeProfileId: DEFAULT_OPENAI_CHAT_PROFILE.profileId,
   profiles: DEFAULT_PROFILES,
   targetLanguage: 'zh-CN',
   sourceLanguage: 'auto',
@@ -22,7 +21,6 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   bilingualDisplay: true,
   displayMode: 'bilingual',
   showFloatingControl: true,
-  mockDelayMs: 120,
 };
 
 const STORAGE_KEY = 'omni_translate_settings';
@@ -72,7 +70,7 @@ export async function saveSettings(
 export async function getActiveProfile(): Promise<TranslationProviderConfig> {
   const settings = await loadSettings();
   const found = settings.profiles.find((p) => p.profileId === settings.activeProfileId);
-  return found || settings.profiles[0] || DEFAULT_MOCK_PROFILE;
+  return found || settings.profiles[0] || DEFAULT_OPENAI_CHAT_PROFILE;
 }
 
 export async function saveProfile(profile: TranslationProviderConfig): Promise<void> {
@@ -94,7 +92,7 @@ export async function deleteProfile(profileId: string): Promise<void> {
   const updatedProfiles = settings.profiles.filter((p) => p.profileId !== profileId);
   const newActiveId =
     settings.activeProfileId === profileId
-      ? updatedProfiles[0]?.profileId || DEFAULT_MOCK_PROFILE.profileId
+      ? updatedProfiles[0]?.profileId || DEFAULT_OPENAI_CHAT_PROFILE.profileId
       : settings.activeProfileId;
 
   await saveSettings({

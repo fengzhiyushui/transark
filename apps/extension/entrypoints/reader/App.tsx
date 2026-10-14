@@ -179,7 +179,7 @@ export const App: React.FC = () => {
                     </li>
                     <li className="flex items-start gap-1.5">
                       <span className="text-blue-500 mt-0.5">•</span>
-                      <span>配合本地 Ollama 或伴随服务实现离线翻译</span>
+                      <span>通过 API 接入云端大模型实现逐段双语对照</span>
                     </li>
                   </ul>
                 </div>

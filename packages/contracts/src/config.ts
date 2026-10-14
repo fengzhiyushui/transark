@@ -1,4 +1,11 @@
 /**
+ * 翻译接入方式（顶层维度，仅两类）：
+ * - 'local': 本地接入 —— 指向本机 / 内网自建推理服务（底层适配后续版本提供）
+ * - 'api':   API 接入 —— 指向第三方云端大模型服务，需适配各厂商协议
+ */
+export type AccessMode = 'local' | 'api';
+
+/**
  * 数据安全与传输策略：
  * - 'device-only': 严格设备本地处理，不允许任何局域网或公网传输
  * - 'allow-lan': 允许局域网内部自建或内网服务处理，不允许公网
@@ -7,20 +14,24 @@
 export type DataPolicy = 'device-only' | 'allow-lan' | 'allow-cloud';
 
 /**
- * 通信协议与适配器标识：
- * - 'openai-chat': OpenAI 标准 ChatCompletions 接口 (/v1/chat/completions)
- * - 'openai-responses': OpenAI Structured Outputs / Responses 规范
- * - 'anthropic-messages': Anthropic Claude 官方规范 (/v1/messages)
- * - 'chrome-builtin': 浏览器端侧原生翻译引擎 (Chrome On-device Translator)
- * - 'mock': 内置离线模拟引擎 (零配置快速体验)
+ * API 通信协议（仅保留市面上主流的四种大模型 API 形式）：
+ * - 'openai-chat': OpenAI Chat Completions (/v1/chat/completions)
+ *   事实标准，覆盖 DeepSeek、月之暗面、通义千问、硅基流动、
+ *   vLLM / LM Studio / One-API 等绝大多数云端与自建网关。
+ * - 'openai-responses': OpenAI Responses API (/v1/responses)
+ * - 'anthropic-messages': Anthropic Messages (/v1/messages)
+ * - 'gemini-generate': Google Gemini generateContent (/v1beta/models/{model}:generateContent)
  */
-export type TranslationProtocol =
+export type ApiProtocol =
   | 'openai-chat'
   | 'openai-responses'
   | 'anthropic-messages'
-  | 'chrome-builtin'
-  | 'mock'
-  | (string & {});
+  | 'gemini-generate';
+
+/**
+ * 通信协议与适配器标识（含自定义协议占位，便于向前兼容）。
+ */
+export type TranslationProtocol = ApiProtocol | (string & {});
 
 /**
  * 译文页面展示呈现模式：
@@ -87,8 +98,16 @@ export interface ProviderCapabilities {
 export interface ProviderLimits {
   /** 单次批处理允许的最大段落数 */
   maxBatchSize?: number;
-  /** 单次请求最大字符数或 Token 数 */
+  /** 单次请求最大输入字符数或 Token 数（约束「发出去」的内容） */
   maxInputLength?: number;
+  /**
+   * 单次请求允许生成的最大 Token 数（约束「收回来」的内容）。
+   *
+   * 与 `maxInputLength` 语义相反，不可混用：输入上限用于裁剪请求，
+   * 输出上限用于防止模型输出被截断。翻译场景下译文长度与原文同量级，
+   * 因此默认值需按批内原文总量估算。
+   */
+  maxOutputTokens?: number;
   /** 最大并发请求数 */
   concurrency?: number;
   /** 单次请求超时时间 (毫秒) */
@@ -101,17 +120,23 @@ export interface ProviderLimits {
  * 翻译服务提供者配置实体
  */
 export interface TranslationProviderConfig {
-  /** 唯一配置 Profile 标识（如 'local-ollama', 'cloud-openai'） */
+  /** 唯一配置 Profile 标识（如 'api-deepseek', 'local-gateway'） */
   profileId: string;
   /** 配置版本号，修改配置时递增以隔离缓存与旧任务 */
   revision: number;
   /** 人类可读的服务名称 */
   name: string;
-  /** 适配器通信协议 */
+  /**
+   * 接入方式（顶层维度）：
+   * - 'api'：API 接入，配合 `protocol` 选择具体厂商协议
+   * - 'local'：本地接入，底层适配暂未提供
+   */
+  accessMode: AccessMode;
+  /** 适配器通信协议（accessMode 为 'api' 时生效） */
   protocol: TranslationProtocol;
-  /** API 基础根路径（保留反向代理子路径，如 http://127.0.0.1:11434） */
+  /** API 基础根路径（保留反向代理子路径，如 https://api.deepseek.com/v1） */
   baseUrl: string;
-  /** 使用的模型标识或网关别名（如 'qwen2.5:7b', 'gpt-4o'） */
+  /** 使用的模型标识或网关别名（如 'deepseek-chat', 'gpt-4o-mini'） */
   model: string;
   /** 鉴权凭据配置 */
   auth: ProviderAuthConfig;

@@ -29,9 +29,17 @@ export default defineContentScript({
       }
 
       queue = new ViewportPriorityQueue({
-        batchSize: 8,
+        // 批越大，请求数越少、RPM 压力越低；并发度受上游配额约束
+        batchSize: 12,
         concurrency: 2,
-        translateFn: (req, signal) => requestTranslation(req),
+        maxRetries: 2,
+        retryBaseDelayMs: 400,
+        translateFn: (req, signal, onSegment) => requestTranslation(req, onSegment),
+        // 流式增量：某段一到达就立即回填，无需等整批
+        onSegmentTranslated: (unit, segment) => {
+          mounter.mountTranslation(unit, segment);
+        },
+        // 兜底：整批结束时补齐未通过流式回填的段落（非流式路径下即全部段落）
         onBatchTranslated: (response, units) => {
           const respMap = new Map(response.segments.map((s) => [s.id, s]));
           for (const unit of units) {
