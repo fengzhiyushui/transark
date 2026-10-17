@@ -1,4 +1,5 @@
 import type { TranslationProviderConfig, DisplayMode } from '@translate/contracts';
+import type { CloudServiceConfig } from '../cloud/client';
 import { DEFAULT_PROFILES, DEFAULT_OPENAI_CHAT_PROFILE } from './default-configs';
 
 export interface ExtensionSettings {
@@ -10,7 +11,15 @@ export interface ExtensionSettings {
   bilingualDisplay: boolean;
   displayMode: DisplayMode;
   showFloatingControl: boolean;
+  cloud: CloudServiceConfig;
 }
+
+export const DEFAULT_CLOUD_CONFIG: CloudServiceConfig = {
+  endpoint: 'http://127.0.0.1:8780',
+  apiKey: '',
+  enabled: false,
+  asrFallback: true,
+};
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   activeProfileId: DEFAULT_OPENAI_CHAT_PROFILE.profileId,
@@ -21,6 +30,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   bilingualDisplay: true,
   displayMode: 'bilingual',
   showFloatingControl: true,
+  cloud: DEFAULT_CLOUD_CONFIG,
 };
 
 const STORAGE_KEY = 'omni_translate_settings';
@@ -33,9 +43,26 @@ export async function loadSettings(): Promise<ExtensionSettings> {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       const data = await chrome.storage.local.get(STORAGE_KEY);
       if (data && data[STORAGE_KEY]) {
+        const stored = data[STORAGE_KEY] as Partial<ExtensionSettings>;
+        // 旧版本存在「本地接入」Profile；该模式已移除，加载时静默清理。
+        const rawProfiles = (
+          Array.isArray(stored.profiles) ? stored.profiles : DEFAULT_SETTINGS.profiles
+        ) as Array<TranslationProviderConfig & { accessMode?: string }>;
+        const profiles = rawProfiles.filter((profile) => profile?.accessMode !== 'local');
+        const normalizedProfiles = profiles.length > 0 ? profiles : DEFAULT_SETTINGS.profiles;
+        const activeProfileId = normalizedProfiles.some(
+          (profile) => profile.profileId === stored.activeProfileId
+        )
+          ? (stored.activeProfileId as string)
+          : normalizedProfiles[0]?.profileId || DEFAULT_SETTINGS.activeProfileId;
+
         return {
           ...DEFAULT_SETTINGS,
-          ...data[STORAGE_KEY],
+          ...stored,
+          profiles: normalizedProfiles,
+          activeProfileId,
+          // 旧版本没有 cloud 字段；嵌套合并避免用户已填配置被默认值覆盖
+          cloud: { ...DEFAULT_CLOUD_CONFIG, ...(stored.cloud || {}) },
         };
       }
     }

@@ -1,11 +1,4 @@
 /**
- * 翻译接入方式（顶层维度，仅两类）：
- * - 'local': 本地接入 —— 指向本机 / 内网自建推理服务（底层适配后续版本提供）
- * - 'api':   API 接入 —— 指向第三方云端大模型服务，需适配各厂商协议
- */
-export type AccessMode = 'local' | 'api';
-
-/**
  * 数据安全与传输策略：
  * - 'device-only': 严格设备本地处理，不允许任何局域网或公网传输
  * - 'allow-lan': 允许局域网内部自建或内网服务处理，不允许公网
@@ -126,13 +119,7 @@ export interface TranslationProviderConfig {
   revision: number;
   /** 人类可读的服务名称 */
   name: string;
-  /**
-   * 接入方式（顶层维度）：
-   * - 'api'：API 接入，配合 `protocol` 选择具体厂商协议
-   * - 'local'：本地接入，底层适配暂未提供
-   */
-  accessMode: AccessMode;
-  /** 适配器通信协议（accessMode 为 'api' 时生效） */
+  /** 适配器通信协议 */
   protocol: TranslationProtocol;
   /** API 基础根路径（保留反向代理子路径，如 https://api.deepseek.com/v1） */
   baseUrl: string;

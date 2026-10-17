@@ -42,7 +42,7 @@ jobs:
         run: pnpm --filter @translate/extension build
 
   test-backend:
-    name: Local Companion Service Tests
+    name: Backend Services Tests (local + cloud)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -53,13 +53,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install local service dependencies
+      - name: Install local & cloud service dependencies
         run: |
-          cd services/local
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e "./services/local"
+          pip install -e "./services/cloud[dev]"
 
-      - name: Run pytest test suite
+      - name: Run local companion service tests
         run: |
           cd services/local
           python -m pytest
+
+      - name: Run cloud service tests
+        run: |
+          cd services/cloud
+          python -m pytest
+
+      - name: Run cloud end-to-end smoke (HTTP + WebSocket)
+        run: |
+          cd services/cloud
+          python scripts/smoke_e2e.py --spawn

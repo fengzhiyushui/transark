@@ -17,12 +17,12 @@
   - 实时翻译进度展示与一键撤销/恢复。
   - 目标语言快速切换与活跃服务 Profile 快速选择。
 - **设置中心 Options** (`entrypoints/options/`)：
-  - 完整的接入配置管理：选择**接入方式**（本地接入 / API 接入）、API 协议、BaseUrl、API Key 与数据策略（`device-only`, `allow-lan`, `allow-cloud`）。
+  - 完整的接入配置管理：API 协议、BaseUrl、API Key 与数据策略（`device-only`, `allow-lan`, `allow-cloud`）。
   - 一键获取可用模型列表并下拉选择，拉取失败时可手动输入模型名。
   - 连通性测试按钮：直接测试所填地址与模型的往返时延及译文样本。
 
 ### 2. 统一适配器驱动层 (Provider Adapter Layer)
-位于 `src/adapters/`，**仅支持两种接入方式**：`local`（本地接入）与 `api`（API 接入）。
+位于 `src/adapters/`，**仅保留 API 接入**：通过 `protocol` 选择具体厂商协议；连接本机 Ollama / vLLM 时同样走 API 接入，将 BaseUrl 指向回环地址。
 
 - **`TranslationProvider` 接口驱动**：标准化的 `translate(request, signal)` 与 `testConnection(signal)`。
 - **`ApiAdapterBase`**：四个 API 协议适配器的公共基类，统一承载网络错误归一化、HTTP 状态码 → 统一错误码映射、模型输出 JSON 提取与清洗、段落严格对齐（`alignTranslationResults`）与 metrics 组装。
@@ -31,7 +31,6 @@
   - `openai-responses`：`/v1/responses`，使用 `instructions` + `input`，输出解析 `output_text` 与 `output[].content[]`。
 - **`AnthropicAdapter`**：`/v1/messages`，`x-api-key` 鉴权与 `anthropic-version` 版本头，系统提示词位于顶层 `system` 字段。
 - **`GeminiAdapter`**：`/v1beta/models/{model}:generateContent`，`x-goog-api-key` 鉴权，`systemInstruction` + `generationConfig.responseMimeType` 结构化输出。
-- **`LocalAccessAdapter`**：本地接入占位实现。底层适配尚未提供，调用时明确抛出 `MODEL_UNAVAILABLE`，**绝不伪装成功或静默回退云端**。
 - **模型获取 (`model-fetcher.ts`)**：按协议访问各厂商真实 `/models` 端点并归一化模型 ID；Anthropic / Gemini 在浏览器无法列举时降级到内置候选列表。
 
 #### 2.1 流式翻译与逐段回填（性能核心）
@@ -86,6 +85,17 @@
   - 浮动在视频上方的高对比度双语字幕渲染容器（支持背景模糊与高辨识度文字阴影）。
   - 基于精准时间戳（`currentTime >= startTime && currentTime <= endTime`）实时同步双语字幕轨。
   - 支持字号微调与原文/译文独立开关。
+
+---
+
+### 5. 视频双语字幕（云端服务，方案 A）
+
+- **字幕来源四级回退**：`<video>.textTracks` 内嵌轨道 → 站点适配器（内置 YouTube `captionTracks` + timedtext 解析）→ 用户上传 SRT/VTT（Popup「导入字幕」）→ 云端流式 ASR。
+- **有字幕**：`src/subtitles/cues.ts` 解析并建立时间索引，`overlay.ts` 用 Shadow DOM 在视频上方渲染原文/译文双轨；译文经 Background 调云端 `/v1/subtitles/translate?stream=true`，SSE 每 cue 到达即回填。
+- **无字幕**：Popup 开关触发 `ASR_START`，Background 通过 `tabCapture.getMediaStreamId` 取流，Offscreen Document 用 `AudioContext(16k)` + ScriptProcessor 转 int16 PCM，经 WebSocket 送入云端 ASR；识别出的 cue 立即上屏并接续翻译。
+- **安全边界**：API Key 只存在于 `chrome.storage.local` 与扩展上下文，绝不注入网页 DOM；字幕节点只用 `textContent` 写入。
+- **支持范围**：内置站点适配器目前仅 YouTube；其他网站走通用 `textTracks` → 上传 → ASR 回退，DRM 与跨域 iframe 不支持。完整矩阵见 [`docs/VIDEO_SUBTITLE_SUPPORT.md`](../../docs/VIDEO_SUBTITLE_SUPPORT.md)。
+- 云端服务：[`services/cloud/README.md`](../../services/cloud/README.md)；方案 B（浏览器端 WASM ASR）：[`docs/PLAN_B_BROWSER_WASM_ASR.md`](../../docs/PLAN_B_BROWSER_WASM_ASR.md)。
 
 ---
 

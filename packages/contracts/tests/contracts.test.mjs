@@ -112,27 +112,22 @@ test('JobStatus and helpers', () => {
   assert.equal(isJobActive(JobStatus.COMPLETED), false);
 });
 
-test('Mock provider configs conform to dataPolicy expectations', () => {
-  const localCompanion = mockTranslationProviderConfigs.find((c) => c.profileId === 'local-companion-service');
-  assert.ok(localCompanion);
-  assert.equal(localCompanion.accessMode, 'local');
-  assert.equal(localCompanion.dataPolicy, 'device-only');
-  assert.equal(localCompanion.deploymentLocation, 'loopback');
-  assert.equal(localCompanion.processingLocation, 'local');
-
+test('Mock provider configs use API access only', () => {
   const cloud = mockTranslationProviderConfigs.find((c) => c.profileId === 'cloud-openai-byok');
   assert.ok(cloud);
-  assert.equal(cloud.accessMode, 'api');
   assert.equal(cloud.dataPolicy, 'allow-cloud');
-});
+  assert.equal(cloud.processingLocation, 'cloud');
 
-test('Only two access modes are modeled: local and api', () => {
-  const modes = new Set(mockTranslationProviderConfigs.map((c) => c.accessMode));
-  for (const mode of modes) {
-    assert.ok(mode === 'local' || mode === 'api', `unexpected accessMode: ${mode}`);
-  }
-  assert.ok(modes.has('local'));
-  assert.ok(modes.has('api'));
+  const lan = mockTranslationProviderConfigs.find((c) => c.profileId === 'lan-self-hosted-gateway');
+  assert.ok(lan);
+  assert.equal(lan.dataPolicy, 'allow-lan');
+  assert.equal(lan.processingLocation, 'lan');
+
+  // 本地接入模式已移除：不应再存在指向回环的 device-only Profile
+  assert.equal(
+    mockTranslationProviderConfigs.some((c) => c.dataPolicy === 'device-only'),
+    false
+  );
 });
 
 test('Mock OCR, ASR and Job models', () => {

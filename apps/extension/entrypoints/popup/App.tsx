@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Header } from '../../src/components/Header';
 import { PolicyBadge, ProtocolBadge } from '../../src/components/StatusBadge';
 import {
@@ -11,7 +11,11 @@ import {
   sendMessageToTab,
 } from '../../src/messaging/client';
 import type { ExtensionSettings } from '../../src/storage/extension-storage';
-import type { PageTranslationStatus } from '../../src/messaging/protocol';
+import type {
+  ExtensionMessage,
+  PageTranslationStatus,
+  SubtitleRuntimeStatus,
+} from '../../src/messaging/protocol';
 import type { DisplayMode } from '@translate/contracts';
 import {
   Languages,
@@ -28,6 +32,7 @@ import {
   Eye,
   Columns,
   FileText,
+  Subtitles,
 } from 'lucide-react';
 
 const LANGUAGE_OPTIONS = [
@@ -47,6 +52,8 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [translatingNow, setTranslatingNow] = useState(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('bilingual');
+  const [subtitleStatus, setSubtitleStatus] = useState<SubtitleRuntimeStatus | null>(null);
+  const subtitleFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function init() {
@@ -63,6 +70,14 @@ export const App: React.FC = () => {
           if (status.displayMode) {
             setDisplayMode(status.displayMode);
           }
+        }
+
+        const tabId = await getActiveTabId();
+        if (tabId) {
+          const subtitle = await sendMessageToTab<SubtitleRuntimeStatus>(tabId, {
+            type: 'GET_SUBTITLE_STATUS',
+          });
+          if (subtitle.data) setSubtitleStatus(subtitle.data);
         }
       } catch (err) {
         console.error('Failed to init popup:', err);
@@ -98,10 +113,53 @@ export const App: React.FC = () => {
     setPageStatus(status);
   };
 
+  const handleToggleSubtitles = async () => {
+    const tabId = await getActiveTabId();
+    if (!tabId) return;
+    const active = subtitleStatus?.active === true;
+    const message: ExtensionMessage = active
+      ? { type: 'SUBTITLES_STOP' }
+      : { type: 'SUBTITLES_START', payload: { targetLanguage: settings?.targetLanguage } };
+    const response = await sendMessageToTab<SubtitleRuntimeStatus>(tabId, message);
+    if (response.data) setSubtitleStatus(response.data);
+    if (!response.success && response.error) {
+      setSubtitleStatus({
+        active: false,
+        source: null,
+        cueCount: 0,
+        translatedCount: 0,
+        error: response.error,
+      });
+    }
+  };
+
   const handleSelectProfile = async (profileId: string) => {
     if (!settings) return;
     const updated = await updateSettings({ activeProfileId: profileId });
     setSettings(updated);
+  };
+
+  const handleSubtitleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const tabId = await getActiveTabId();
+    if (!tabId) return;
+    const text = await file.text();
+    const response = await sendMessageToTab<SubtitleRuntimeStatus>(tabId, {
+      type: 'SUBTITLES_UPLOAD',
+      payload: { text, filename: file.name },
+    });
+    if (response.data) setSubtitleStatus(response.data);
+    if (!response.success && response.error) {
+      setSubtitleStatus({
+        active: false,
+        source: null,
+        cueCount: 0,
+        translatedCount: 0,
+        error: response.error,
+      });
+    }
   };
 
   const handleSelectTargetLang = async (lang: string) => {
@@ -236,6 +294,54 @@ export const App: React.FC = () => {
               仅显示原文
             </button>
           </div>
+        </div>
+
+        {/* 视频双语字幕 */}
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Subtitles className="h-3.5 w-3.5 text-indigo-600" />
+              <span className="text-xs font-semibold text-slate-800">视频双语字幕</span>
+              {subtitleStatus?.active && (
+                <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 ring-1 ring-indigo-600/20">
+                  {subtitleStatus.source === 'asr' ? '实时识别' : '字幕轨'}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                ref={subtitleFileRef}
+                type="file"
+                accept=".srt,.vtt"
+                className="hidden"
+                onChange={handleSubtitleFileChange}
+              />
+              <button
+                onClick={() => subtitleFileRef.current?.click()}
+                title="导入本地 SRT / VTT 字幕"
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 cursor-pointer"
+              >
+                导入字幕
+              </button>
+              <button
+                onClick={handleToggleSubtitles}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all cursor-pointer ${
+                  subtitleStatus?.active
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {subtitleStatus?.active ? '关闭字幕' : '开启字幕'}
+              </button>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            {subtitleStatus?.error
+              ? subtitleStatus.error
+              : subtitleStatus?.active
+                ? `已加载 ${subtitleStatus.cueCount} 条字幕，已翻译 ${subtitleStatus.translatedCount} 条`
+                : '优先读取视频内嵌字幕；无字幕时自动调用云端 ASR 生成'}
+          </p>
         </div>
 
         {/* 目标语言设置卡片 */}

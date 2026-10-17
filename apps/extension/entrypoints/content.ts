@@ -3,11 +3,15 @@ import { scanTranslationUnits, type TranslationUnit } from '../src/core/dom-walk
 import { ViewportPriorityQueue } from '../src/core/priority-queue';
 import { DOMMounter } from '../src/core/dom-mounter';
 import { DynamicMutationManager } from '../src/core/mutation-manager';
-import { requestTranslation, fetchSettings } from '../src/messaging/client';
+import { requestTranslation, fetchSettings, sendMessageToBackground } from '../src/messaging/client';
+import { SubtitleManager } from '../src/subtitles/manager';
+import { findPrimaryVideo } from '../src/subtitles/sources';
+import { parseSubtitleText } from '../src/subtitles/cues';
 import type {
   ExtensionMessage,
   MessageResponse,
   PageTranslationStatus,
+  AsrEventPayload,
 } from '../src/messaging/protocol';
 import '../src/styles/globals.css';
 
@@ -22,6 +26,41 @@ export default defineContentScript({
     const mounter = new DOMMounter();
     let queue: ViewportPriorityQueue | null = null;
     let mutationManager: DynamicMutationManager | null = null;
+    let subtitleManager: SubtitleManager | null = null;
+
+    function getSubtitleManager(): SubtitleManager {
+      if (!subtitleManager) {
+        subtitleManager = new SubtitleManager({
+          translateCues: async (requestId, cues, targetLanguage) => {
+            const response = await sendMessageToBackground({
+              type: 'CLOUD_TRANSLATE_CUES',
+              payload: {
+                requestId,
+                sourceLanguage: 'auto',
+                targetLanguage,
+                segments: cues.map((cue) => ({ id: cue.id, text: cue.text })),
+              },
+            });
+            if (!response.success) {
+              throw new Error(response.error || '字幕翻译失败');
+            }
+          },
+          startAsr: async (targetLanguage) => {
+            const response = await sendMessageToBackground({
+              type: 'ASR_START',
+              payload: { targetLanguage },
+            });
+            if (!response.success) {
+              throw new Error(response.error || '启动实时字幕失败');
+            }
+          },
+          stopAsr: () => {
+            void sendMessageToBackground({ type: 'ASR_STOP' });
+          },
+        });
+      }
+      return subtitleManager;
+    }
 
     function initQueue() {
       if (queue) {
@@ -155,6 +194,116 @@ export default defineContentScript({
 
           case 'RESTORE_PAGE_ORIGINAL': {
             mounter.setDisplayMode('original-only');
+            sendResponse({ success: true });
+            break;
+          }
+
+          // ------------------------------------------------ 视频字幕 / ASR
+          case 'SUBTITLES_START': {
+            const video = findPrimaryVideo();
+            if (!video) {
+              sendResponse({ success: false, error: '当前页面未找到可挂载字幕的视频' });
+              break;
+            }
+            const payload = message.payload as { targetLanguage?: string } | undefined;
+            getSubtitleManager()
+              .start(video, payload?.targetLanguage || targetLang)
+              .then((status) => sendResponse({ success: true, data: status }))
+              .catch((err) =>
+                sendResponse({
+                  success: false,
+                  error: err instanceof Error ? err.message : String(err),
+                })
+              );
+            // 异步响应，保持消息通道
+            return true;
+          }
+
+          case 'SUBTITLES_STOP': {
+            subtitleManager?.stop();
+            sendResponse({
+              success: true,
+              data: subtitleManager?.getStatus() || {
+                active: false,
+                source: null,
+                cueCount: 0,
+                translatedCount: 0,
+              },
+            });
+            break;
+          }
+
+          case 'SUBTITLES_UPLOAD': {
+            const video = findPrimaryVideo();
+            if (!video) {
+              sendResponse({ success: false, error: '当前页面未找到可挂载字幕的视频' });
+              break;
+            }
+            const payload = message.payload as
+              | { text: string; filename?: string }
+              | undefined;
+            if (!payload?.text) {
+              sendResponse({ success: false, error: '字幕内容为空' });
+              break;
+            }
+            const cues = parseSubtitleText(payload.text);
+            if (cues.length === 0) {
+              sendResponse({
+                success: false,
+                error: '未能解析出字幕 cue，请确认文件为 SRT 或 VTT 格式',
+              });
+              break;
+            }
+            getSubtitleManager()
+              .loadExternalCues(video, cues, targetLang)
+              .then((status) => sendResponse({ success: true, data: status }))
+              .catch((err) =>
+                sendResponse({
+                  success: false,
+                  error: err instanceof Error ? err.message : String(err),
+                })
+              );
+            return true;
+          }
+
+          case 'GET_SUBTITLE_STATUS': {
+            sendResponse({
+              success: true,
+              data: subtitleManager?.getStatus() || {
+                active: false,
+                source: null,
+                cueCount: 0,
+                translatedCount: 0,
+              },
+            });
+            break;
+          }
+
+          case 'SUBTITLE_CUE_TRANSLATED': {
+            const payload = message.payload as
+              | { requestId: string; segment: { id: string; translation: string } }
+              | undefined;
+            if (payload?.segment) {
+              subtitleManager?.handleTranslatedCue(
+                payload.segment.id,
+                payload.segment.translation
+              );
+            }
+            sendResponse({ success: true });
+            break;
+          }
+
+          case 'ASR_EVENT': {
+            const event = message.payload as AsrEventPayload | undefined;
+            if (event) {
+              if (event.kind === 'cue' && event.cue) {
+                subtitleManager?.handleAsrCue(event.cue);
+              } else if (event.kind === 'translation' && event.cueId && event.translation) {
+                subtitleManager?.handleTranslatedCue(event.cueId, event.translation);
+              } else if (event.kind === 'error') {
+                subtitleManager?.handleError(event.error?.message || '实时字幕识别失败');
+              }
+            }
             sendResponse({ success: true });
             break;
           }

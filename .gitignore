@@ -72,3 +72,6 @@ Thumbs.db
 *.sln
 *.sw?
 *.bak
+
+# WorkBuddy project memory (local only)
+.workbuddy/

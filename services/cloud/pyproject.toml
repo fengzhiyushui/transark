@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transark-cloud-service"
+version = "0.1.0"
+description = "TransArk cloud service: subtitle translation, subtitle extraction and streaming ASR for the browser extension"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.11"
+# 注意：本服务复用 services/local 的内核，安装顺序为
+#   pip install -e ../local && pip install -e .
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.3",
+  "httpx>=0.27",
+]
+
+# 可选依赖：ASR 推理、Redis 缓存、测试工具
+[project.optional-dependencies]
+asr = ["faster-whisper>=1.0"]
+cache = ["redis>=5.0"]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+  "Pillow>=10.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["cloud_service*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+addopts = "-ra"

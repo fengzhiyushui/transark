@@ -9,6 +9,7 @@ import {
   testProviderConnection,
 } from '../../src/messaging/client';
 import type { ExtensionSettings } from '../../src/storage/extension-storage';
+import type { CloudServiceConfig } from '../../src/cloud/client';
 import type { TranslationProviderConfig } from '@translate/contracts';
 import {
   Sparkles,
@@ -44,7 +45,6 @@ const PRESET_TEMPLATES: {
       profileId: 'api-openai-chat-preset',
       revision: 1,
       name: 'API 接入 · OpenAI 兼容协议',
-      accessMode: 'api',
       protocol: 'openai-chat',
       baseUrl: 'https://api.deepseek.com/v1',
       model: 'deepseek-chat',
@@ -61,7 +61,6 @@ const PRESET_TEMPLATES: {
       profileId: 'api-anthropic-preset',
       revision: 1,
       name: 'API 接入 · Anthropic Messages',
-      accessMode: 'api',
       protocol: 'anthropic-messages',
       baseUrl: 'https://api.anthropic.com/v1',
       model: 'claude-3-5-sonnet-20241022',
@@ -78,31 +77,12 @@ const PRESET_TEMPLATES: {
       profileId: 'api-gemini-preset',
       revision: 1,
       name: 'API 接入 · Google Gemini',
-      accessMode: 'api',
       protocol: 'gemini-generate',
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
       model: 'gemini-2.5-flash',
       auth: { type: 'api-key', apiKey: '' },
       dataPolicy: 'allow-cloud',
       processingLocation: 'cloud',
-      capabilities: { textTranslation: true, ocr: false, asr: false },
-    },
-  },
-  {
-    title: '本地接入 · 本机自建服务',
-    desc: '仅保留配置入口，底层适配尚未提供（当前版本会明确报不支持）',
-    config: {
-      profileId: 'local-self-hosted-preset',
-      revision: 1,
-      name: '本地接入 · 本机自建服务',
-      accessMode: 'local',
-      protocol: 'openai-chat',
-      baseUrl: 'http://127.0.0.1:8000/v1',
-      model: '',
-      auth: { type: 'bearer', apiKey: '' },
-      dataPolicy: 'device-only',
-      deploymentLocation: 'loopback',
-      processingLocation: 'local',
       capabilities: { textTranslation: true, ocr: false, asr: false },
     },
   },
@@ -125,6 +105,13 @@ export const App: React.FC = () => {
   const triggerToast = () => {
     setSaveToast(true);
     setTimeout(() => setSaveToast(false), 2200);
+  };
+
+  const updateCloudConfig = async (patch: Partial<CloudServiceConfig>) => {
+    if (!settings) return;
+    const updated = await updateSettings({ cloud: { ...settings.cloud, ...patch } });
+    setSettings(updated);
+    triggerToast();
   };
 
   const handleSaveProfile = async (profile: TranslationProviderConfig) => {
@@ -283,7 +270,7 @@ export const App: React.FC = () => {
               <div>
                 <h2 className="text-sm font-bold text-slate-900">翻译服务驱动列表</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  仅两种接入方式：本地接入（暂未适配）与 API 接入（OpenAI 兼容 / Responses / Anthropic / Gemini）
+                  仅 API 接入：OpenAI 兼容 / Responses / Anthropic / Gemini
                 </p>
               </div>
 
@@ -295,8 +282,7 @@ export const App: React.FC = () => {
                       profileId: `profile-${Date.now()}`,
                       revision: 1,
                       name: '自定义 API 接入',
-                      accessMode: 'api',
-                      protocol: 'openai-chat',
+                                      protocol: 'openai-chat',
                       baseUrl: 'https://api.deepseek.com/v1',
                       model: 'deepseek-chat',
                       auth: { type: 'bearer', apiKey: '' },
@@ -604,6 +590,61 @@ export const App: React.FC = () => {
                   <option value="fr">Français (fr)</option>
                   <option value="de">Deutsch (de)</option>
                 </select>
+              </div>
+
+              {/* 云端字幕与 ASR 服务 */}
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800">云端字幕与 ASR 服务</span>
+                    <p className="text-[11px] text-slate-500">
+                      视频无内嵌字幕时，由云端 whisper 生成；字幕译文走云端服务转发
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.cloud.enabled}
+                    onChange={(e) => void updateCloudConfig({ enabled: e.target.checked })}
+                    className="h-4 w-4 rounded accent-indigo-600 cursor-pointer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600">
+                      服务地址 (Endpoint)
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.cloud.endpoint}
+                      onChange={(e) => void updateCloudConfig({ endpoint: e.target.value })}
+                      placeholder="https://cloud.example.com"
+                      className="mt-1 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 font-mono text-xs text-slate-900 focus:border-indigo-500 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600">
+                      API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={settings.cloud.apiKey}
+                      onChange={(e) => void updateCloudConfig({ apiKey: e.target.value })}
+                      placeholder="仅保存在 chrome.storage.local"
+                      className="mt-1 block w-full rounded-xl border border-slate-300 bg-slate-50/50 px-3 py-2 font-mono text-xs text-slate-900 focus:border-indigo-500 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-[11px] text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={settings.cloud.asrFallback}
+                    onChange={(e) => void updateCloudConfig({ asrFallback: e.target.checked })}
+                    className="h-3.5 w-3.5 rounded accent-indigo-600 cursor-pointer"
+                  />
+                  无字幕视频自动启用实时 ASR（会上传当前标签页音频）
+                </label>
               </div>
 
               {/* 自动翻译开关 */}

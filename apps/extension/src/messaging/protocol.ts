@@ -1,7 +1,9 @@
 import type {
+  AsrCue,
   TranslationRequest,
   TranslationResponse,
   TranslationProviderConfig,
+  TranslationSegmentResult,
   DisplayMode,
 } from '@translate/contracts';
 import type { ExtensionSettings } from '../storage/extension-storage';
@@ -17,6 +19,16 @@ export type ExtensionMessageType =
   | 'SET_DISPLAY_MODE'
   | 'GET_PAGE_STATUS'
   | 'RESTORE_PAGE_ORIGINAL'
+  | 'SUBTITLES_START'
+  | 'SUBTITLES_STOP'
+  | 'SUBTITLES_UPLOAD'
+  | 'GET_SUBTITLE_STATUS'
+  | 'CLOUD_TRANSLATE_CUES'
+  | 'SUBTITLE_CUE_TRANSLATED'
+  | 'ASR_START'
+  | 'ASR_STOP'
+  | 'ASR_EVENT'
+  | 'FETCH_SUBTITLE_TRACK'
   | 'PING';
 
 export interface BaseMessage<T extends ExtensionMessageType = ExtensionMessageType, P = unknown> {
@@ -77,6 +89,65 @@ export interface GetPageStatusMessage extends BaseMessage<'GET_PAGE_STATUS', voi
 
 export interface RestorePageOriginalMessage extends BaseMessage<'RESTORE_PAGE_ORIGINAL', void> {}
 
+// ------------------------------------------------------------ 视频字幕 / ASR
+
+export type SubtitleSource = 'embedded' | 'site' | 'upload' | 'asr' | null;
+
+export interface SubtitleRuntimeStatus {
+  active: boolean;
+  source: SubtitleSource;
+  cueCount: number;
+  translatedCount: number;
+  error?: string;
+}
+
+export interface StartSubtitlesMessage
+  extends BaseMessage<'SUBTITLES_START', { targetLanguage?: string }> {}
+
+export interface StopSubtitlesMessage extends BaseMessage<'SUBTITLES_STOP', void> {}
+
+/** Content Script 内解析上传的 SRT/VTT 文本并接管字幕。 */
+export interface UploadSubtitlesMessage
+  extends BaseMessage<'SUBTITLES_UPLOAD', { text: string; filename?: string }> {}
+
+export interface GetSubtitleStatusMessage extends BaseMessage<'GET_SUBTITLE_STATUS', void> {}
+
+/** Content → Background：把一批 cue 交给云端流式翻译。 */
+export interface CloudTranslateCuesMessage
+  extends BaseMessage<
+    'CLOUD_TRANSLATE_CUES',
+    Pick<TranslationRequest, 'requestId' | 'sourceLanguage' | 'targetLanguage' | 'segments'>
+  > {}
+
+/** Background → Content：单条 cue 译文到达。 */
+export interface SubtitleCueTranslatedMessage
+  extends BaseMessage<
+    'SUBTITLE_CUE_TRANSLATED',
+    { requestId: string; segment: TranslationSegmentResult }
+  > {}
+
+export interface AsrStartMessage
+  extends BaseMessage<'ASR_START', { targetLanguage?: string }> {}
+
+export interface AsrStopMessage extends BaseMessage<'ASR_STOP', void> {}
+
+export interface AsrEventPayload {
+  kind: 'started' | 'cue' | 'translation' | 'final' | 'error';
+  sessionId?: string;
+  cue?: AsrCue;
+  cueId?: string;
+  translation?: string;
+  durationSec?: number;
+  error?: { code: string; message: string };
+}
+
+/** Offscreen → Background → Content：ASR 生命周期事件。 */
+export interface AsrEventMessage extends BaseMessage<'ASR_EVENT', AsrEventPayload> {}
+
+/** Content → Background：抓取站点字幕轨（仅允许受控域名，防 SSRF）。 */
+export interface FetchSubtitleTrackMessage
+  extends BaseMessage<'FETCH_SUBTITLE_TRACK', { url: string }> {}
+
 export interface PingMessage extends BaseMessage<'PING', void> {}
 
 export type ExtensionMessage =
@@ -90,6 +161,16 @@ export type ExtensionMessage =
   | SetDisplayModeMessage
   | GetPageStatusMessage
   | RestorePageOriginalMessage
+  | StartSubtitlesMessage
+  | StopSubtitlesMessage
+  | UploadSubtitlesMessage
+  | GetSubtitleStatusMessage
+  | CloudTranslateCuesMessage
+  | SubtitleCueTranslatedMessage
+  | AsrStartMessage
+  | AsrStopMessage
+  | AsrEventMessage
+  | FetchSubtitleTrackMessage
   | PingMessage;
 
 export interface MessageResponse<T = unknown> {

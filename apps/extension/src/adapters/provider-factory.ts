@@ -1,7 +1,6 @@
 ﻿import type { TranslationProviderConfig } from '@translate/contracts';
 import { ErrorCode, createAppError } from '@translate/contracts';
 import type { TranslationProvider } from './types.ts';
-import { LocalAccessAdapter } from './local-adapter.ts';
 import { OpenAIChatAdapter } from './openai-adapter.ts';
 import { AnthropicAdapter } from './anthropic-adapter.ts';
 import { GeminiAdapter } from './gemini-adapter.ts';
@@ -15,18 +14,11 @@ export const API_PROTOCOLS = [
 ] as const;
 
 /**
- * 按「接入方式 + 协议」创建翻译提供者。
+ * 按协议创建翻译提供者。
  *
- * - accessMode === 'local' → 本地接入（当前为占位实现，明确报不支持）
- * - accessMode === 'api'   → 按 protocol 分派到对应厂商协议适配器
- *
- * 不再静默回退到任何模拟实现：配置错误会明确抛错，避免用户误判翻译来源。
+ * 项目仅保留 API 接入：配置错误会明确抛错，避免用户误判翻译来源。
  */
 export function createTranslationProvider(config: TranslationProviderConfig): TranslationProvider {
-  if (config.accessMode === 'local') {
-    return new LocalAccessAdapter(config);
-  }
-
   switch (config.protocol) {
     case 'openai-chat':
     case 'openai-responses':

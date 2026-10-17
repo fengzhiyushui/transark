@@ -19,12 +19,12 @@
 
 ## 📖 项目简介
 
-**译舟 (TransArk)** 是一款专为桌面浏览器（Chrome / Edge）设计的现代化智能翻译系统。与传统重度依赖云端第三方的翻译插件不同，译舟主打**本地优先（Local-First）**与**严格隐私边界保护**：
+**译舟 (TransArk)** 是一款专为桌面浏览器（Chrome / Edge）设计的现代化智能翻译系统。与传统重度依赖云端第三方的翻译插件不同，译舟主打**隐私优先（Privacy-First）**与**严格的数据边界控制**：
 
 1. **原境双语阅读**：智能扫描网页语义块，保留原网页 DOM 结构、原生排版与交互事件，实现独立节点双语并列呈现与一键毫秒级撤销/恢复。
 2. **本地文档工作台**：内置独立的双语阅读工作台，支持本地 `.txt`、`.md`、`.docx` 以及带版面坐标的 `.pdf` 文档解析与对照阅读，零依赖本地导出。
 3. **视频双语字幕与实时 ASR**：依附 HTML5 视频播放器的悬浮双语字幕；配合本地伴随服务与 `whisper.cpp`，实现无字幕音视频的实时离线语音识别与双语对齐。
-4. **统一跨协议模型适配**：仅保留**本地接入**与 **API 接入**两种接入方式。API 接入适配市面主流协议——OpenAI Chat Completions（事实标准，兼容 DeepSeek / Kimi / 通义 / vLLM / One-API 等网关）、OpenAI Responses、Anthropic Messages 与 Google Gemini；支持一键拉取模型列表并自主选择。本地接入入口保留，底层适配尚未提供。
+4. **统一跨协议模型适配**：仅保留 **API 接入**，适配市面主流协议——OpenAI Chat Completions（事实标准，兼容 DeepSeek / Kimi / 通义 / vLLM / One-API 等网关）、OpenAI Responses、Anthropic Messages 与 Google Gemini；支持一键拉取模型列表并自主选择。连接本机 Ollama / vLLM 时，同样使用 API 接入并把 BaseUrl 指向回环地址。
 5. **绝对离线与出口守卫（NetworkGuard）**：内置物理级网络守卫，在离线模式下严禁静默回退到外网云端，彻底杜绝企业机密与个人敏感文档泄露。
 
 ---
@@ -39,6 +39,29 @@
 
 ---
 
+## 🎬 视频字幕与云端服务（方案 A）
+
+视频双语字幕采用 **云端翻译 + 云端 ASR** 的方案落地：
+
+- **有字幕**：优先读取 `<video>` 内嵌字幕轨，其次 YouTube `captionTracks` 站点适配器，再次 Popup 中导入的 SRT/VTT；字幕译文经云端 `/v1/subtitles/translate` 以 SSE 逐 cue 回填，原文与译文在 Shadow DOM 悬浮层中双语同时展示。
+- **无字幕**：扩展通过 `tabCapture` 捕获当前标签页音频，经 Offscreen Document 转为 16kHz PCM，通过 WebSocket 送入云端 ASR，识别出的 cue 立即上屏并接续翻译。
+- **服务端不部署大模型**：翻译转发至第三方 API（OpenAI Chat / Responses、Anthropic、Gemini），ASR 使用 faster-whisper int8，模型按需加载；Redis 为可选缓存。
+
+```bash
+# 启动云端服务（默认 0.0.0.0:8780）
+cd services/cloud
+pip install -e ../local -e ".[dev]"
+CLOUD_API_KEYS=dev-key CLOUD_PROVIDER_API_KEY=sk-... python -m cloud_service
+```
+
+在扩展设置 →「常规偏好」中填写云端地址与 API Key 后，Popup 会出现「视频双语字幕」开关。
+
+- 云端服务说明：[`services/cloud/README.md`](./services/cloud/README.md)
+- 视频字幕支持范围与限制：[`docs/VIDEO_SUBTITLE_SUPPORT.md`](./docs/VIDEO_SUBTITLE_SUPPORT.md)
+- 方案 B（浏览器端 WASM ASR 隐私档）设计：[`docs/PLAN_B_BROWSER_WASM_ASR.md`](./docs/PLAN_B_BROWSER_WASM_ASR.md)
+
+---
+
 ## 🏗️ 系统架构
 
 项目基于 **pnpm Monorepo** 组织，前后端通过严格代码化的共享契约包完全解耦：
@@ -50,7 +73,8 @@ transark/
 ├── apps/
 │   └── extension/          # 浏览器扩展：Chrome/Edge Manifest V3 (WXT + React + TailwindCSS)
 ├── services/
-│   └── local/              # 本地伴随服务：FastAPI 异步架构 (文档解析、OCR、ASR 与长任务引擎)
+│   ├── local/              # 本地伴随服务：FastAPI (文档解析、OCR、ASR 与长任务引擎)
+│   └── cloud/              # 云端服务：API Key 鉴权、字幕翻译 SSE、流式 ASR (方案 A)
 ├── docs/                   # 架构设计、通用 API 接入方案、详细使用教程与风险评估报告
 └── tests/
     └── fixtures/           # 标准测试样本 (文档、字幕、音视频片段)
@@ -140,7 +164,7 @@ python -m uvicorn local_service.app:app --host 127.0.0.1 --port 8765
 
 ## 🧪 开发与测试
 
-项目具备严密的自动化测试覆盖体系，全仓库共计 **93 项端到端及单元测试用例**：
+项目具备严密的自动化测试覆盖体系，全仓库共计 **190+ 项端到端及单元测试用例**（扩展 92 + 契约 7 + 本地服务 77 + 云端服务 17）：
 
 ```bash
 # 运行全仓库测试 (Contracts TS 测试 + Extension 单元测试 + Local Service pytest)
@@ -154,6 +178,12 @@ pnpm --filter @translate/extension test
 
 # 仅运行本地伴随服务 77 项 pytest 测试
 cd services/local && python -m pytest
+
+# 仅运行云端服务 17 项 pytest 测试
+cd services/cloud && python -m pytest
+
+# 云端真实 HTTP + WebSocket 冒烟（自启 echo + mock ASR）
+cd services/cloud && python scripts/smoke_e2e.py --spawn
 ```
 
 ---
@@ -175,6 +205,9 @@ cd services/local && python -m pytest
 - [安全与风险防范审计 (SECURITY_AND_RISK_AUDIT.md)](./docs/SECURITY_AND_RISK_AUDIT.md)：深入分析权限、CSRF、路径遍历与大模型提示词注入风险。
 - [实施路线图 (ROADMAP)](./docs/browser-translation-roadmap-2026-10-10.md)：功能规划与演进设计。
 - [通用 API 接入方案 (API INTEGRATION)](./docs/browser-translation-api-integration-2026-10-10.md)：多模型与网关协议规范。
+- [方案 B：浏览器端 WASM ASR 设计](./docs/PLAN_B_BROWSER_WASM_ASR.md)：隐私档位的适用场景、实施步骤与 A/B 对比。
+- [视频字幕支持范围与限制](./docs/VIDEO_SUBTITLE_SUPPORT.md)：YouTube 适配、通用 textTracks、上传与 ASR 回退、DRM/iframe 限制。
+- [云端服务部署教程](./docs/SERVER_DEPLOYMENT.md)：运行环境、依赖安装、环境变量、systemd/Docker/Nginx、验证与排错。
 
 ---
 

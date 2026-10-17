@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { OpenAIChatAdapter } from '../src/adapters/openai-adapter.ts';
 import { AnthropicAdapter } from '../src/adapters/anthropic-adapter.ts';
 import { GeminiAdapter } from '../src/adapters/gemini-adapter.ts';
-import { LocalAccessAdapter } from '../src/adapters/local-adapter.ts';
 import { createTranslationProvider } from '../src/adapters/provider-factory.ts';
-import { DEFAULT_OPENAI_CHAT_PROFILE, DEFAULT_LOCAL_PROFILE } from '../src/storage/default-configs.ts';
+import { DEFAULT_OPENAI_CHAT_PROFILE } from '../src/storage/default-configs.ts';
 import { fastTextHash, generateSegmentId } from '../src/core/hash.ts';
 
 describe('输出 Token 预算（max_tokens 语义）', () => {
@@ -190,7 +189,6 @@ describe('Anthropic Messages 协议适配器', () => {
     profileId: 'claude-test',
     revision: 1,
     name: 'Claude Test',
-    accessMode: 'api',
     protocol: 'anthropic-messages',
     baseUrl: 'https://api.anthropic.com/v1',
     model: 'claude-3-5-sonnet-20241022',
@@ -236,7 +234,6 @@ describe('Google Gemini 协议适配器', () => {
     profileId: 'gemini-test',
     revision: 1,
     name: 'Gemini Test',
-    accessMode: 'api',
     protocol: 'gemini-generate',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     model: 'gemini-2.5-flash',
@@ -330,7 +327,7 @@ describe('模型输出的容错解析', () => {
 
 describe('接入方式分派 (Provider Factory)', () => {
   test('dispatches every supported API protocol to an adapter', () => {
-    const base = { ...DEFAULT_OPENAI_CHAT_PROFILE, accessMode: 'api' };
+    const base = DEFAULT_OPENAI_CHAT_PROFILE;
     assert.ok(
       createTranslationProvider({ ...base, protocol: 'openai-chat' }) instanceof OpenAIChatAdapter
     );
@@ -342,25 +339,6 @@ describe('接入方式分派 (Provider Factory)', () => {
     );
     assert.ok(
       createTranslationProvider({ ...base, protocol: 'gemini-generate' }) instanceof GeminiAdapter
-    );
-  });
-
-  test('local access mode yields the placeholder adapter', () => {
-    const provider = createTranslationProvider(DEFAULT_LOCAL_PROFILE);
-    assert.ok(provider instanceof LocalAccessAdapter);
-  });
-
-  test('local access refuses to translate instead of faking success', async () => {
-    const provider = new LocalAccessAdapter(DEFAULT_LOCAL_PROFILE);
-    await assert.rejects(
-      () =>
-        provider.translate({
-          requestId: 'r1',
-          sourceLanguage: 'en',
-          targetLanguage: 'zh-CN',
-          segments: [{ id: 's1', text: 'Hello' }],
-        }),
-      (err) => err.code === 'MODEL_UNAVAILABLE'
     );
   });
 

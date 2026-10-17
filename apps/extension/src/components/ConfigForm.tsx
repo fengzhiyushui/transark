@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type {
   TranslationProviderConfig,
-  AccessMode,
   TranslationProtocol,
   AuthType,
 } from '@translate/contracts';
@@ -13,7 +12,6 @@ import {
   Key,
   Link as LinkIcon,
   Cpu,
-  Info,
   Download,
 } from 'lucide-react';
 
@@ -27,7 +25,7 @@ interface ConfigFormProps {
 /** 各 API 协议的默认端点、模型与鉴权方式 */
 const PROTOCOL_PRESETS: Record<
   string,
-  { baseUrl: string; model: string; authType: AuthType; policy: 'allow-cloud' | 'device-only' }
+  { baseUrl: string; model: string; authType: AuthType; policy: 'allow-cloud' }
 > = {
   'openai-chat': {
     baseUrl: 'https://api.deepseek.com/v1',
@@ -79,42 +77,6 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
     sampleTranslation?: string;
     error?: string;
   } | null>(null);
-
-  const isLocal = config.accessMode === 'local';
-
-  // 切换接入方式
-  const handleAccessModeChange = (mode: AccessMode) => {
-    setModelList([]);
-    setFetchError(null);
-    setTestResult(null);
-
-    if (mode === 'local') {
-      setConfig({
-        ...config,
-        accessMode: 'local',
-        baseUrl: config.baseUrl?.startsWith('http://127.0.0.1') ||
-          config.baseUrl?.startsWith('http://localhost')
-          ? config.baseUrl
-          : 'http://127.0.0.1:8000/v1',
-        dataPolicy: 'device-only',
-        deploymentLocation: 'loopback',
-        processingLocation: 'local',
-      });
-    } else {
-      const preset = PROTOCOL_PRESETS[config.protocol] || PROTOCOL_PRESETS['openai-chat'];
-      setConfig({
-        ...config,
-        accessMode: 'api',
-        protocol: (PROTOCOL_PRESETS[config.protocol] ? config.protocol : 'openai-chat') as TranslationProtocol,
-        baseUrl: preset.baseUrl,
-        model: config.model || preset.model,
-        dataPolicy: preset.policy,
-        deploymentLocation: 'cloud',
-        processingLocation: 'cloud',
-        auth: { ...config.auth, type: preset.authType },
-      });
-    }
-  };
 
   // 切换 API 协议
   const handleProtocolChange = (proto: string) => {
@@ -186,7 +148,7 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
             {initialConfig.name ? '编辑接入配置' : '新增接入配置'}
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            仅支持两种接入方式：本地接入 与 API 接入
+            通过 OpenAI / Anthropic / Gemini 协议接入外部模型
           </p>
         </div>
         <span className="font-mono text-[11px] text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
@@ -195,75 +157,33 @@ export const ConfigForm: React.FC<ConfigFormProps> = ({
       </div>
 
       <div className="space-y-4">
-        {/* 1. 基础配置：名称 + 接入方式 */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700">配置名称</label>
-            <input
-              type="text"
-              className={inputClass}
-              value={config.name}
-              onChange={(e) => setConfig({ ...config, name: e.target.value })}
-              placeholder="例如：DeepSeek 官方 / 实验室网关"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700">接入方式</label>
-            <div className="mt-1.5 grid grid-cols-2 gap-2">
-              {(['local', 'api'] as AccessMode[]).map((mode) => {
-                const active = config.accessMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => handleAccessModeChange(mode)}
-                    className={`rounded-xl border px-3 py-2 text-xs font-bold transition-all cursor-pointer ${
-                      active
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/20'
-                        : 'border-slate-300 bg-slate-50/50 text-slate-600 hover:border-slate-400'
-                    }`}
-                  >
-                    {mode === 'local' ? '本地接入' : 'API 接入'}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        {/* 1. 基础配置：名称 */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700">配置名称</label>
+          <input
+            type="text"
+            className={inputClass}
+            value={config.name}
+            onChange={(e) => setConfig({ ...config, name: e.target.value })}
+            placeholder="例如：DeepSeek 官方 / 实验室网关"
+          />
         </div>
 
-        {/* 本地接入说明 */}
-        {isLocal && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 space-y-1">
-            <div className="font-bold flex items-center gap-1.5">
-              <Info className="h-4 w-4 text-amber-600" />
-              <span>本地接入的底层适配尚未提供</span>
-            </div>
-            <p className="text-[11px] text-amber-800/90 leading-relaxed">
-              本版本仅提供本地接入的配置入口，尚未实现底层引擎适配，实际翻译会明确返回
-              <code className="mx-auto bg-white/70 px-1 rounded font-mono">MODEL_UNAVAILABLE</code>
-              ，不会静默回退到任何云端服务。请先使用「API 接入」。
-            </p>
-          </div>
-        )}
-
         {/* 2. API 接入：协议选择 */}
-        {!isLocal && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-700">API 协议</label>
-            <select
-              className={`${inputClass} cursor-pointer`}
-              value={String(config.protocol)}
-              onChange={(e) => handleProtocolChange(e.target.value)}
-            >
-              {Object.keys(PROTOCOL_PRESETS).map((proto) => (
-                <option key={proto} value={proto}>
-                  {PROTOCOL_LABELS[proto]}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700">API 协议</label>
+          <select
+            className={`${inputClass} cursor-pointer`}
+            value={String(config.protocol)}
+            onChange={(e) => handleProtocolChange(e.target.value)}
+          >
+            {Object.keys(PROTOCOL_PRESETS).map((proto) => (
+              <option key={proto} value={proto}>
+                {PROTOCOL_LABELS[proto]}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* 3. 端点与密钥 */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -1,0 +1,40 @@
+services:
+  cloud:
+    build:
+      context: ../..
+      dockerfile: services/cloud/Dockerfile
+    ports:
+      - "8780:8780"
+    environment:
+      CLOUD_API_KEYS: ${CLOUD_API_KEYS:-dev-key-change-me}
+      CLOUD_RATE_LIMIT_RPM: ${CLOUD_RATE_LIMIT_RPM:-60}
+      CLOUD_DEFAULT_PROFILE_ID: ${CLOUD_DEFAULT_PROFILE_ID:-cloud-default}
+      CLOUD_PROVIDER_PROTOCOL: ${CLOUD_PROVIDER_PROTOCOL:-openai-chat}
+      CLOUD_PROVIDER_BASE_URL: ${CLOUD_PROVIDER_BASE_URL:-https://api.deepseek.com/v1}
+      CLOUD_PROVIDER_MODEL: ${CLOUD_PROVIDER_MODEL:-deepseek-chat}
+      CLOUD_PROVIDER_API_KEY: ${CLOUD_PROVIDER_API_KEY:-}
+      CLOUD_ASR_ENGINE: ${CLOUD_ASR_ENGINE:-faster-whisper}
+      CLOUD_ASR_MODEL_ID: ${CLOUD_ASR_MODEL_ID:-base}
+      CLOUD_REDIS_URL: redis://redis:6379/0
+      CLOUD_DATA_DIR: /data
+    volumes:
+      - cloud-data:/data
+      - model-cache:/models
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  cloud-data:
+  model-cache:

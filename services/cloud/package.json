@@ -1,0 +1,15 @@
+{
+  "name": "@translate/cloud-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TransArk cloud service (subtitle translation + streaming ASR)",
+  "scripts": {
+    "dev": "python -m cloud_service",
+    "start": "python -m cloud_service",
+    "test": "python -m pytest",
+    "test:verbose": "python -m pytest -v"
+  },
+  "dependencies": {
+    "@translate/contracts": "workspace:*"
+  }
+}
