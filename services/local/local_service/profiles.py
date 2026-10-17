@@ -74,13 +74,19 @@ BUILTIN_PROFILES: dict[str, TranslationProviderConfig] = {
 
 
 class ProfileStore:
-    """Profile 存储：内置种子 + 用户文件覆盖。"""
+    """Profile 存储：内置种子 + 用户文件覆盖。
 
-    def __init__(self, data_dir: Path) -> None:
+    ``persist=False`` 时仅驻留内存（云端服务使用，避免把 Provider Key
+    以明文写入磁盘）。
+    """
+
+    def __init__(self, data_dir: Path, *, persist: bool = True) -> None:
         self._data_dir = Path(data_dir)
         self._path = self._data_dir / "providers.json"
+        self._persist = persist
         self._user_profiles: dict[str, TranslationProviderConfig] = {}
-        self._load()
+        if persist:
+            self._load()
 
     # -------------------------------------------------------------- persistence
     def _load(self) -> None:
@@ -100,6 +106,8 @@ class ProfileStore:
             self._user_profiles[config.profile_id] = config
 
     def _save(self) -> None:
+        if not self._persist:
+            return
         try:
             self._data_dir.mkdir(parents=True, exist_ok=True)
             payload = {"version": 1, "profiders": [c.dump() for c in self._user_profiles.values()]}

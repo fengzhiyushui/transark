@@ -109,6 +109,8 @@ export CLOUD_DEFAULT_PROFILE_ID=deepseek-chat
 
 扩展请求时可通过 `profileId` 选择 Provider；未指定则用 `CLOUD_DEFAULT_PROFILE_ID`。
 
+> Provider 配置（含 `apiKey`）只驻留进程内存，**不会写入 `providers.json`**；重启后需重新注入环境变量。请将环境文件权限设为 `600`，避免密钥被同机其他用户读取。
+
 ### 4.3 ASR
 
 | 变量 | 默认 | 说明 |

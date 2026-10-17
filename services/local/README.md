@@ -2,6 +2,8 @@
 
 本地伴随服务（Local Companion Service）——浏览器翻译产品的本机处理服务。
 
+> **范围说明**：该服务是**独立后端**，扩展当前不直接调用；扩展的网页翻译走用户配置的 API，视频字幕/ASR 走 `services/cloud`。本服务的配对、NetworkGuard、OCR/PDF/长任务能力仍可单独使用或供其他客户端集成。
+
 - 语言/框架：**Python 3.11+（FastAPI + Uvicorn）**
 - 监听地址：**仅回环 `127.0.0.1:8765`**（默认拒绝非回环绑定）
 - 契约对齐：所有入参/响应字段使用 Pydantic 模型严格校验，与
@@ -30,10 +32,10 @@ python -m pytest            # 或 pnpm --filter @translate/local-service test
 ```
 
 启动后服务会生成 8 位配对码并写入
-`{数据目录}/pairing.json`（数据目录默认
-`%LOCALAPPDATA%\translate-local-service`，可用
-`LOCAL_SERVICE_DATA_DIR` 覆盖；也可用 `LOCAL_SERVICE_PAIRING_CODE`
-直接指定固定配对码，便于自动化）。
+`{数据目录}/pairing.json`（Windows 默认
+`%LOCALAPPDATA%\translate-local-service`，Linux/macOS 默认
+`~/.local/share/translate-local-service`；可用 `LOCAL_SERVICE_DATA_DIR` 覆盖；
+也可用 `LOCAL_SERVICE_PAIRING_CODE` 直接指定固定配对码，便于自动化）。
 
 交互式文档：<http://127.0.0.1:8765/docs>。
 
@@ -58,7 +60,7 @@ python -m pytest            # 或 pnpm --filter @translate/local-service test
 
 ### 配对鉴权
 
-1. 客户端读取服务端配对码（控制台输出或 `{data_dir}/pairing.json`）；
+1. 客户端读取服务端配对码（`{data_dir}/pairing.json`，或通过 `LOCAL_SERVICE_PAIRING_CODE` 指定）；
 2. `POST /v1/pair {"pairingCode": "..."}` → `{token, tokenType, expiresAt, ...}`；
 3. 后续请求携带 `Authorization: Bearer <token>`。
 

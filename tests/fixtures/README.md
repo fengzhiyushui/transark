@@ -1,8 +1,8 @@
 # Test Fixtures
 
-用于测试与基准验证的固定样本目录。包含文本、文档、字幕、图像及音视频测试样本。
+用于测试与基准验证的固定样本目录。当前仅包含以下文件：
 
-- `documents/`: 文本、Markdown、DOCX 与 PDF 样本文件
-- `subtitles/`: SRT、VTT 字幕样本
-- `images/`: OCR 识别测试图片
-- `audio/`: ASR 语音识别测试音频
+- `documents/sample.txt`：TXT 文档解析/阅读器样本；
+- `subtitles/sample.srt`：SRT 字幕解析样本。
+
+> 早期文档提到的 `images/`（OCR 图片）与 `audio/`（ASR 音频）目录尚未提供；相关后端的 OCR/ASR 测试使用内存构造的 Base64 样本。

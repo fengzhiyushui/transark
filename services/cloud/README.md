@@ -2,12 +2,16 @@
 
 TransArk 云端服务（**方案 A**）：为浏览器扩展提供字幕翻译、字幕提取与实时 ASR。
 
+> **与扩展的关系**：扩展通过 `CLOUD_API_KEYS` 鉴权调用本服务；第三方 Provider Key 只放在服务端环境变量/启动配置中，且不落盘。
+> `services/local` 是独立的本地后端，扩展当前不调用。
+>
 > 部署到服务器（systemd / Docker / Nginx / 排错）请参阅
 > [`docs/SERVER_DEPLOYMENT.md`](../../docs/SERVER_DEPLOYMENT.md)。
 
 ## 设计要点
 
 - **服务端不部署大模型**：翻译全部转发到第三方 API（复用 `local_service.engines` 的四种协议适配器：`openai-chat`、`openai-responses`、`anthropic-messages`、`gemini-generate`）。
+- **Provider Key 不落盘**：`ProfileStore(persist=False)`，配置只驻留进程内存，重启需重新注入环境变量。
 - **ASR 按需加载**：`faster-whisper` 以 int8/CPU 运行，模型权重首次请求时下载到 `HF_HOME`，不打进镜像；模型不可用时明确返回 `MODEL_UNAVAILABLE`，绝不静默降级。
 - **缓存优先**：译文按「Provider/版本/引擎/语言对/原文/策略版本」做 SHA-256 键；配置 `CLOUD_REDIS_URL` 时用 Redis，否则退化为进程内 LRU。
 - **流式体验**：SSE 逐 cue 下发译文；WS 流式 ASR 每识别出一句即推送，可选内联翻译。
@@ -100,6 +104,7 @@ CLOUD_API_KEYS=dev-key CLOUD_PROVIDER_API_KEY=sk-... docker compose up --build
 | `CLOUD_ASR_OVERLAP_SECONDS` | `0.5` | 窗口重叠（去重衔接） |
 | `CLOUD_REDIS_URL` | 空 | 配置后启用 Redis 缓存 |
 | `CLOUD_CACHE_TTL_SECONDS` | `86400` | 译文缓存 TTL |
+| `CLOUD_CACHE_MAX_ENTRIES` | `10000` | 无 Redis 时的进程内缓存上限 |
 | `CLOUD_MAX_CONCURRENT_JOBS` | `4` | 长任务并发 |
 
 ## 扩展性

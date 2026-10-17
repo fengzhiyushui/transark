@@ -57,6 +57,15 @@ def test_rate_limit_returns_429(tmp_path):
     assert error["details"]["retryAfterMs"] > 0
 
 
+def test_provider_secrets_are_not_persisted(tmp_path):
+    settings = make_settings(tmp_path)
+    app = create_app(settings)
+    with TestClient(app):
+        pass
+    # Provider 配置（含密钥）仅驻留内存，不应写入 providers.json
+    assert not (tmp_path / "data" / "providers.json").exists()
+
+
 def test_rate_limit_falls_back_when_redis_unavailable(tmp_path):
     # 指向不存在的 Redis：初始化或首次计数失败后应回退到进程内限流
     app = create_app(

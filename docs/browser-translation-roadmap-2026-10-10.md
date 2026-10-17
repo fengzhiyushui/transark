@@ -1,5 +1,7 @@
 浏览器翻译与本地翻译实施路线图
 
+> **状态（2026-10-17 更新）**：本文为 2026-10-10 的历史路线图存档。当前实现已收敛为“扩展 + 云端字幕服务（方案 A）+ 独立本地服务”：本地接入模式已移除，方案 B（浏览器端 WASM ASR）仍未实施。当前行为以 [README](../README.md)、[TUTORIAL](./TUTORIAL.md)、[PLAN_B_BROWSER_WASM_ASR](./PLAN_B_BROWSER_WASM_ASR.md) 为准。
+
 日期：2026-10-10。版本：v0.3，覆盖完整产品目标与通用 API 接入。
 
 依据：[技术调研](./browser-translation-research-2026-10-10.md)及已确认的产品范围。本文件更新原有范围和实施顺序，API 对接细节见[通用接入方案](./browser-translation-api-integration-2026-10-10.md)。已有资料调研仍可复用，原有“有限网页 MVP”不代表完整产品。本轮只更新文档，尚未搭建工程、安装依赖、下载模型或执行功能与性能实测。

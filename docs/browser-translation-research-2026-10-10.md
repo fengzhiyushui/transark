@@ -1,5 +1,7 @@
 浏览器翻译插件开发技术调研
 
+> **状态（2026-10-17 更新）**：本文为 2026-10-10 的历史调研存档。部分方案已被当前实现取代：扩展的“本地接入”模式已移除；视频字幕/ASR 采用 `services/cloud`；`services/local` 为独立后端，扩展不直接调用。当前行为以 [README](../README.md)、[TUTORIAL](./TUTORIAL.md)、[VIDEO_SUBTITLE_SUPPORT](./VIDEO_SUBTITLE_SUPPORT.md)、[SERVER_DEPLOYMENT](./SERVER_DEPLOYMENT.md) 为准。
+
 范围更新：本报告保留最初的技术调研与有限网页 MVP 建议。当前最终目标已明确包含本地文件、离线处理、多种网页翻译、已有字幕与无字幕视频翻译，以及 AI 翻译；实施范围和阶段以[实施路线图](./browser-translation-roadmap-2026-10-10.md)为准，接口配置另见[通用 API 接入方案](./browser-translation-api-integration-2026-10-10.md)。本文原有工期估算不适用于扩大后的完整目标。
 
 调研日期：2026-10-10。范围：以桌面 Chrome / Edge 的 Manifest V3 扩展为主，兼顾 Firefox / Safari 的迁移条件。依据为官方文档、公开仓库和许可证；本次未安装插件、执行构建或进行翻译质量与性能实测。下面的架构、优先级和工期属于工程建议。

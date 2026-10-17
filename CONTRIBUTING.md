@@ -23,16 +23,24 @@
    - 所有新增功能必须补充单元测试。
 4. **提交前自检**：
    ```bash
-   # 1. 确保代码格式与类型检查 0 报错
+   # 1. 代码格式与类型检查
    pnpm typecheck
 
-   # 2. 确保全量自动化测试全部通过
+   # 2. 前端与契约测试
+   pnpm --filter @translate/contracts test
+   pnpm --filter @translate/extension test
+
+   # 3. 后端测试（需先安装 Python 依赖）
+   cd services/local && python -m pytest
+   cd ../cloud && python -m pytest
+
+   # 4. 如已安装全部依赖，可运行根脚本
    pnpm test
    ```
 5. **提交 Commit 信息**（推荐遵循 Conventional Commits 规范）：
-   - `feat: 添加 PDF 扫描件 OCR 增强模式`
-   - `fix: 修复某些站点虚拟列表切换时的 DOM 挂载异常`
-   - `docs: 更新本地伴随服务配对说明`
+   - `feat: 增加字幕文件上传与 YouTube timedtext 适配`
+   - `fix: 修复 SPA 动态节点重复翻译`
+   - `docs: 更新云端服务部署说明`
 6. **创建 Pull Request**：详细描述变更动机与测试证据。
 
 ---
@@ -40,6 +48,6 @@
 ## 3. 代码与架构规范
 
 - **零外部 CDN 脚本**：扩展端严禁引入任何外链远程脚本，所有第三方库必须通过 npm 依赖并在本地打包。
-- **Contract-First 契约先行**：若涉及接口、事件、错误码、数据模型变更，必须优先修改 `packages/contracts`，并通过测试后再更新扩展或后端。
-- **隐私保护底线**：严禁引入任何无用户授权的遥测、用户输入搜集或隐式外网回退逻辑。
+- **Contract-First 契约先行**：若涉及接口、事件、错误码、数据模型变更，必须优先修改 `packages/contracts`，并通过测试后再更新扩展、云端服务或本地服务。
+- **隐私保护底线**：严禁引入任何无用户授权的遥测、用户输入搜集或隐式外网回退逻辑；云端新增数据出口必须同步更新 `SECURITY.md` 与部署文档。
 - **相对路径与无敏感信息**：代码、注释、文档中严禁写入绝对开发路径、开发者个人用户名或硬编码秘钥。

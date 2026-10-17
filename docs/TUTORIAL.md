@@ -1,6 +1,6 @@
 # 译舟 (TransArk) - 完整上手与实战教程
 
-本教程详细指导如何从源码构建、安装配置、日常使用以及将「译舟 (TransArk)」接入不同大模型引擎与本地伴随服务。
+本教程详细指导如何从源码构建、安装配置、日常使用，以及将「译舟 (TransArk)」接入不同大模型引擎与云端字幕服务。
 
 ---
 
@@ -26,7 +26,7 @@
 请确保本地已安装：
 - **Node.js** >= 18.0.0
 - **pnpm** >= 9.0.0
-- **Chrome** 或 **Edge** 浏览器最新稳定版
+- **Chrome** >= 116 或 **Edge** 同版本（视频字幕依赖 `offscreen` / `tabCapture`）
 
 ### 1.2 源码编译
 ```bash
@@ -64,12 +64,11 @@ pnpm --filter @translate/extension build
   - 点击「撤销」：瞬时隐藏所有译文，页面原样还原；
   - 点击「恢复」：直接唤醒已缓存的译文，零等待秒级重现。
 
-### 2.2 Options 设置中心（模型与安全策略配置）
+### 2.2 Options 设置中心（模型与云端服务配置）
 右键扩展图标选择「选项」，或在 Popup 弹窗中点击齿轮图标：
 - **添加/编辑 Profile**：
-  - `接入方式`：当前版本**仅支持 API 接入**，通过 `protocol` 选择 OpenAI / Anthropic / Gemini 协议。
   - `Profile ID`：唯一标识（如 `api-openai-chat`, `deepseek-chat`）。
-  - `API 协议`（选择 API 接入时出现）：
+  - `API 协议`：
     - `openai-chat`：OpenAI Chat Completions，**事实标准**，兼容 DeepSeek / Kimi / 通义 / 硅基流动 / vLLM / One-API 等绝大多数网关；
     - `openai-responses`：OpenAI Responses API（`/v1/responses`）；
     - `anthropic-messages`：Anthropic Messages API；
@@ -77,17 +76,15 @@ pnpm --filter @translate/extension build
   - `Base URL`：服务根地址（如 `https://api.deepseek.com/v1`）。
   - `API Key`：鉴权令牌（保存在浏览器隔离的本地存储中）。
   - `模型名称`：可点击「获取模型」一键拉取该服务的可用模型列表并下拉选择；拉取失败（如浏览器跨域限制）时可直接手动填写模型 ID。
-  - `数据策略 (Data Policy)`：
-    - `device-only`：严禁外网，仅允许回环地址；
-    - `allow-lan`：允许内网服务器与网关；
-    - `allow-cloud`：允许公网云端大模型。
+  - `数据策略`：当前版本由协议预设自动标注为 `allow-cloud`，设置页只做展示，不提供手动修改，也不在扩展侧执行出口拦截。
 - **连通性测试 (Test Connection)**：填写配置后点击测试按钮，扩展将向目标服务发送一段标准文本，返回往返时延（毫秒）与译文，确保连通无误后方可保存。
 
-### 2.3 Reader 工作台（文档与字幕独立阅读器）
+### 2.3 Reader 工作台（本地文档阅读）
 在浏览器中打开 `chrome-extension://<你的扩展ID>/reader.html`（或在 Header 栏点击「文档工作台」图标）：
-- 提供沉浸式的无干扰对照阅读环境。
-- 支持直接拖拽本地文件解析。
+- 提供沉浸式的无干扰对照阅读环境，支持 `.txt`、`.md`、`.docx`。
+- 支持拖拽或选择本地文件解析。
 - 支持单段手动重新翻译、段落复制与双语对照导出。
+- 其中的“视频字幕”标签是组件预览，真实站点的视频字幕请使用 Popup 中的「视频双语字幕」开关。
 
 ---
 
@@ -98,14 +95,12 @@ pnpm --filter @translate/extension build
 绝大多数国内外模型服务都提供 OpenAI Chat Completions 兼容端点，因此这是首选协议。
 
 1. **在译舟设置中心中添加 Profile**：
-   - 接入方式：`API 接入`
    - API 协议：`openai-chat`
    - Profile 名称：`DeepSeek`
    - Base URL：`https://api.deepseek.com/v1`
    - API Key：填入你在该平台申请的密钥
 2. **获取并选择模型**：点击「获取模型」按钮，扩展会请求 `{BaseUrl}/models` 并列出可用模型，从下拉列表中选择即可。若拉取失败，也可直接手动填写模型 ID（如 `deepseek-chat`）。
-3. **数据策略**：选择 `allow-cloud`（允许公网云端）。
-4. **点击「测试连通性」**：显示连接成功且测得往返时延与译文样本后，点击「保存并设为当前活跃 Profile」。
+3. **点击「测试连通性」**：显示连接成功且测得往返时延与译文样本后，点击「保存并生效」。
 
 > **其他常见服务示例**
 > | 服务 | Base URL | 模型示例 |
@@ -115,7 +110,7 @@ pnpm --filter @translate/extension build
 > | 月之暗面 Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
 > | 自建 vLLM / One-API 网关 | `http://127.0.0.1:8000/v1` | 你部署的模型名 |
 >
-> 自建网关指向回环地址时，可将数据策略设为 `device-only`；指向内网服务器时用 `allow-lan`。
+> 自建网关指向回环地址时，同样通过 API 接入；数据策略字段由预设标为 `allow-cloud`，扩展不做出口拦截，请自行确认端点可信。
 
 ---
 
@@ -140,7 +135,6 @@ pnpm --filter @translate/extension build
    - 服务根地址：`https://api.deepseek.com/v1`
    - API Key：`sk-xxxxxxxxxxxxxxxxxxxxxxxx`
    - 目标模型：`deepseek-chat`
-   - 数据策略：`allow-cloud`（明确声明允许云端调用）
 3. **连通性测试与保存**：译舟将以标准的 JSON 结构化格式进行分段对齐翻译，保证回填精准。
 
 > **想连接本机模型？** 使用 **API 接入 + `openai-chat` 协议**，Base URL 填 Ollama（`http://127.0.0.1:11434/v1`）、vLLM 或 LM Studio 的兼容地址即可；扩展不再提供独立的「本地接入」模式。
@@ -200,9 +194,9 @@ pnpm --filter @translate/extension build
 ### Q2: 翻译后网页部分富文本按钮点击无反应或排版错乱？
 **A**: 译舟采用非侵入式架构，译文以兄弟节点追加在原标签之后，不会修改宿主标签的原生 DOM 树与事件绑定。如果目标网站有严格的 CSS 布局导致溢出，可切换为「仅显示原文」或点击一键撤销。
 
-### Q3: 连接本地服务失败，报 `NETWORK_ERROR`？
+### Q3: 连接本机模型服务失败，报 `NETWORK_ERROR`？
 **A**:
-1. 检查本地服务是否已启动（如 `ollama serve`，或你的 vLLM / LM Studio 服务）；
+1. 检查本机服务是否已启动（如 `ollama serve`，或你的 vLLM / LM Studio 服务）；
 2. 确认地址在浏览器中可访问（Ollama 用 `http://127.0.0.1:11434`，注意 Base URL 需带 `/v1` 后缀）；
 3. 如果是在 macOS / Linux 环境中，请确认服务允许被浏览器扩展跨域访问（Ollama 可配置环境变量 `OLLAMA_ORIGINS="chrome-extension://*"`）。
 

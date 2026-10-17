@@ -130,7 +130,8 @@ def build_services(settings: CloudSettings) -> AppServices:
     local_settings.ensure_data_dir()
 
     guard = NetworkGuard(local_settings)
-    profiles = ProfileStore(local_settings.data_dir)
+    # 云端 Provider Key 只来自环境变量/启动配置，不落盘
+    profiles = ProfileStore(local_settings.data_dir, persist=False)
     engines = EngineRegistry(guard)
     cache = build_cache(settings)
     translation = TranslationService(

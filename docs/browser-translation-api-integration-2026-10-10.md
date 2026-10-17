@@ -1,5 +1,7 @@
 浏览器翻译插件 API 通用接入方案
 
+> **状态（2026-10-17 更新）**：本文为 2026-10-10 的设计方案存档。四种 API 协议仍与当前适配器一致，但“本地接入模式”已移除，`dataPolicy` 字段不再由扩展 UI 编辑；云端服务另有 API Key 鉴权与字幕/ASR 端点。当前行为以 [README](../README.md)、[TUTORIAL](./TUTORIAL.md)、[SERVER_DEPLOYMENT](./SERVER_DEPLOYMENT.md) 为准。
+
 日期：2026-10-10。版本：v0.1 设计方案。
 关联：[总体路线图](./browser-translation-roadmap-2026-10-10.md)。
 

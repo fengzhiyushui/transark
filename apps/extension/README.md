@@ -17,7 +17,7 @@
   - 实时翻译进度展示与一键撤销/恢复。
   - 目标语言快速切换与活跃服务 Profile 快速选择。
 - **设置中心 Options** (`entrypoints/options/`)：
-  - 完整的接入配置管理：API 协议、BaseUrl、API Key 与数据策略（`device-only`, `allow-lan`, `allow-cloud`）。
+  - 完整的接入配置管理：API 协议、BaseUrl、API Key、模型与连通性测试；数据策略字段由协议预设标注（API 接入为 `allow-cloud`），当前 UI 不提供手动修改。
   - 一键获取可用模型列表并下拉选择，拉取失败时可手动输入模型名。
   - 连通性测试按钮：直接测试所填地址与模型的往返时延及译文样本。
 
@@ -81,10 +81,11 @@
   - 原生支持加载本地 `.txt`, `.md`, `.docx` 文档（基于现代浏览器 `DecompressionStream` 零外部依赖解压与解析）。
   - 支持「左右分栏」与「上下逐段」对照阅读模式。
   - 支持全篇批量翻译、单段重译、译文快速复制与导出双语文件。
-- **HTML5 视频悬浮字幕容器 (`SubtitleOverlay.tsx`)**：
-  - 浮动在视频上方的高对比度双语字幕渲染容器（支持背景模糊与高辨识度文字阴影）。
-  - 基于精准时间戳（`currentTime >= startTime && currentTime <= endTime`）实时同步双语字幕轨。
-  - 支持字号微调与原文/译文独立开关。
+- **HTML5 视频悬浮字幕 (`src/subtitles/overlay.ts`)**：
+  - `BilingualSubtitleOverlay` 在视频上方创建 Shadow DOM 浮层，原文常显、译文逐 cue 回填。
+  - 基于 `video.currentTime` 二分查找活跃 cue，seek/倍速自动重算；只使用 `textContent` 写入。
+  - 样式为内置高对比度方案，暂不支持字号/位置自定义。
+  - Reader 中的“视频字幕预览”是独立演示组件（`VideoSubtitlePlayer`），不代表真实站点接入；真实字幕请使用 Popup 开关。
 
 ---
 
@@ -108,7 +109,7 @@ cd apps/extension
 # 执行类型检查 (零报错)
 pnpm run typecheck
 
-# 运行自动化单元测试 (包含适配器、Hash、DOM识别与双语挂载测试)
+# 运行自动化单元测试（适配器、流式解析、DOM、字幕解析/Overlay、云端客户端）
 pnpm run test
 
 # 构建生产扩展包 (输出位于 .output/chrome-mv3)
@@ -124,9 +125,9 @@ pnpm run build
    - Edge: `edge://extensions/`
 2. 开启右上角 **「开发者模式 (Developer mode)」**。
 3. 点击 **「加载已解压的扩展程序 (Load unpacked)」**。
-4. 选择目录：`apps/extension/.output/chrome-mv3`（即项目根目录下生成的编译产物路径）。
+4. 选择目录：`apps/extension/.output/chrome-mv3`（即项目根目录下生成的编译产物路径；选中 `.output/chrome-mv3` 这一层，不要选源码目录）。
 5. 体验方式：
    - 打开扩展内的自带测试页：直接在浏览器打开 `chrome-extension://<扩展ID>/demo.html`。
    - 打开本地对照阅读器：点击扩展图标中的「阅读器」或直接打开 `chrome-extension://<扩展ID>/reader.html`。
-   - 进入设置中心：点击「设置」或右键图标「选项」。
-   - 在任意英文网页上点击扩展 Popup 弹窗的翻译开关，即可以已配置的 **API 接入**（OpenAI 兼容 / Responses / Anthropic / Gemini）体验丝滑的双语段落阅读与一键撤销/恢复！
+   - 进入设置中心：点击「设置」或右键图标「选项」，先配置 API Profile（视频字幕还需在「常规偏好」配置云端服务）。
+   - 在任意英文网页上点击扩展 Popup 弹窗的翻译开关，即可以已配置的 **API 接入**（OpenAI 兼容 / Responses / Anthropic / Gemini）体验双语段落阅读与一键撤销/恢复。
